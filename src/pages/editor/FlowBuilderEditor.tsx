@@ -378,18 +378,55 @@ function QuestionCard({ question, index, onUpdate, onDelete, onMoveUp, onMoveDow
               className="h-7 text-xs"
             />
           </div>
-          {(question.input_type === "select" || question.input_type === "radio" || question.input_type === "multiselect") && (
-            <div>
-              <Label className="text-xs">Alternativ (kommaseparerade)</Label>
-              <Input
-                value={(question.options || []).map(o => o.label).join(", ")}
-                onChange={e => {
-                  const opts = e.target.value.split(",").map(s => s.trim()).filter(Boolean).map(s => ({ value: s, label: s }));
+          {(question.input_type === "select" || question.input_type === "radio" || question.input_type === "multiselect" || question.input_type === "checkbox") && (
+            <div className="space-y-2">
+              <Label className="text-xs">Alternativ</Label>
+              {(question.options || []).map((opt, oi) => (
+                <div key={oi} className="flex items-start gap-1.5 bg-muted/50 rounded-md p-2">
+                  <div className="flex-1 space-y-1">
+                    <Input
+                      value={opt.label}
+                      onChange={e => {
+                        const opts = [...(question.options || [])];
+                        opts[oi] = { ...opts[oi], label: e.target.value, value: e.target.value };
+                        onUpdate({ options: opts });
+                      }}
+                      placeholder="Alternativtext"
+                      className="h-7 text-xs"
+                    />
+                    <Input
+                      value={opt.helptext || ""}
+                      onChange={e => {
+                        const opts = [...(question.options || [])];
+                        opts[oi] = { ...opts[oi], helptext: e.target.value };
+                        onUpdate({ options: opts });
+                      }}
+                      placeholder="Hjälptext (valfritt)"
+                      className="h-6 text-[11px] text-muted-foreground border-dashed"
+                    />
+                  </div>
+                  <button
+                    onClick={() => {
+                      const opts = (question.options || []).filter((_, j) => j !== oi);
+                      onUpdate({ options: opts });
+                    }}
+                    className="text-destructive/60 hover:text-destructive mt-1"
+                  >
+                    <Trash2 className="h-3 w-3" />
+                  </button>
+                </div>
+              ))}
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-xs w-full"
+                onClick={() => {
+                  const opts = [...(question.options || []), { value: "", label: "", helptext: "" }];
                   onUpdate({ options: opts });
                 }}
-                placeholder="Alt 1, Alt 2, Alt 3"
-                className="h-7 text-xs"
-              />
+              >
+                <PlusCircle className="mr-1 h-3 w-3" /> Lägg till alternativ
+              </Button>
             </div>
           )}
         </div>
