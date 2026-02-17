@@ -12,6 +12,8 @@ import MyTickets from "./pages/MyTickets";
 import TicketDetail from "./pages/TicketDetail";
 import Statistics from "./pages/Statistics";
 import FlowList from "./pages/editor/FlowList";
+import FlowEditorPage from "./pages/editor/FlowEditorPage";
+import FlowPreviewPage from "./pages/editor/FlowPreviewPage";
 import RoleMapping from "./pages/admin/RoleMapping";
 import AuditLogs from "./pages/admin/AuditLogs";
 import IntegrationSettings from "./pages/admin/IntegrationSettings";
@@ -49,6 +51,9 @@ const App = () => (
               <Route path="/tickets/:id" element={<TicketDetail />} />
               <Route path="/stats" element={<Statistics />} />
               <Route path="/editor/flows" element={<FlowList />} />
+              <Route path="/editor/flows/new" element={<FlowEditorPage />} />
+              <Route path="/editor/flows/:id" element={<FlowEditorPage />} />
+              <Route path="/editor/flows/preview" element={<FlowPreviewPage />} />
               <Route path="/admin/roles" element={<RoleMapping />} />
               <Route path="/admin/logs" element={<AuditLogs />} />
               <Route path="/admin/settings" element={<IntegrationSettings />} />
