@@ -28,6 +28,40 @@ export function useFlows() {
   });
 }
 
+export function usePublishedFlows() {
+  return useQuery({
+    queryKey: ["published-flows"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("flows")
+        .select("id, name, description, category")
+        .eq("status", "published")
+        .order("name");
+      if (error) throw error;
+      return data as Pick<FlowRow, "id" | "name" | "description" | "category">[];
+    },
+  });
+}
+
+export function usePublishedFlowTree(flowId: string | undefined) {
+  return useQuery({
+    queryKey: ["published-flow-tree", flowId],
+    enabled: !!flowId,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("flow_versions")
+        .select("tree_json")
+        .eq("flow_id", flowId!)
+        .eq("status", "published")
+        .order("version", { ascending: false })
+        .limit(1)
+        .single();
+      if (error) throw error;
+      return data.tree_json as unknown as FlowTree;
+    },
+  });
+}
+
 export function useFlowVersion(flowId: string | undefined) {
   return useQuery({
     queryKey: ["flow-version", flowId],

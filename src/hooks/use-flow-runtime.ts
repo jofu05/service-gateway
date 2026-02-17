@@ -140,7 +140,7 @@ export function useFlowRuntime(flowTree: FlowTree) {
     }
 
     // Evaluate transitions
-    const nextStepId = resolveTransition(currentStep, ctx);
+    const nextStepId = resolveTransition(currentStep, ctx, flowTree.steps);
     if (!nextStepId) return false;
 
     setCtx(prev => ({
@@ -178,12 +178,19 @@ export function useFlowRuntime(flowTree: FlowTree) {
   };
 }
 
-function resolveTransition(step: FlowStep, ctx: RuntimeContext): string | null {
+function resolveTransition(step: FlowStep, ctx: RuntimeContext, allSteps: FlowStep[]): string | null {
   for (const t of step.transitions) {
     if (t.condition && evaluateCondition(t.condition, ctx)) {
       return t.next_step_id;
     }
   }
   const defaultT = step.transitions.find(t => t.is_default);
-  return defaultT?.next_step_id ?? null;
+  if (defaultT?.next_step_id) return defaultT.next_step_id;
+
+  // Fallback: advance to next step in array if no transitions defined
+  const currentIndex = allSteps.findIndex(s => s.id === step.id);
+  if (currentIndex >= 0 && currentIndex < allSteps.length - 1) {
+    return allSteps[currentIndex + 1].id;
+  }
+  return null;
 }
