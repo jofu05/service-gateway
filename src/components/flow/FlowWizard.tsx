@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useFlowRuntime } from "@/hooks/use-flow-runtime";
 import type { FlowTree, FlowQuestion, AiSuggestion } from "@/lib/flow-engine/types";
 import { evaluateCondition } from "@/lib/flow-engine/condition-evaluator";
+import { resolveText } from "@/lib/flow-engine/utils";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -37,13 +38,18 @@ export default function FlowWizard({ flowTree, onSubmit, onClose }: FlowWizardPr
     return <div className="p-8 text-center text-muted-foreground">Flödet kunde inte laddas</div>;
   }
 
+  // Resolve dynamic text in step fields
+  const resolvedTitle = resolveText(currentStep.title, ctx);
+  const resolvedDescription = resolveText(currentStep.description, ctx);
+  const resolvedHelptext = currentStep.helptext ? resolveText(currentStep.helptext, ctx) : undefined;
+
   return (
     <div className="max-w-4xl mx-auto space-y-4 animate-fade-in">
       {/* Progress */}
       <div className="space-y-1">
         <div className="flex items-center justify-between text-sm">
-          <span className="font-heading font-semibold">{flowTree.flow.name}</span>
-          <span className="text-muted-foreground">{currentStep.title}</span>
+          <span className="font-heading font-semibold">{resolveText(flowTree.flow.name, ctx)}</span>
+          <span className="text-muted-foreground">{resolvedTitle}</span>
         </div>
         <Progress value={progress} className="h-2" />
       </div>
@@ -53,14 +59,14 @@ export default function FlowWizard({ flowTree, onSubmit, onClose }: FlowWizardPr
         <div className={showAiPanel ? "lg:col-span-2" : "lg:col-span-3"}>
           <Card>
             <CardHeader>
-              <CardTitle className="font-heading">{currentStep.title}</CardTitle>
-              {currentStep.description && (
-                <p className="text-sm text-muted-foreground">{currentStep.description}</p>
+              <CardTitle className="font-heading">{resolvedTitle}</CardTitle>
+              {resolvedDescription && (
+                <p className="text-sm text-muted-foreground">{resolvedDescription}</p>
               )}
-              {currentStep.helptext && (
+              {resolvedHelptext && (
                 <div className="flex items-start gap-2 p-3 rounded-lg bg-info/10 text-info text-sm mt-2">
                   <HelpCircle className="h-4 w-4 mt-0.5 shrink-0" />
-                  <span>{currentStep.helptext}</span>
+                  <span>{resolvedHelptext}</span>
                 </div>
               )}
             </CardHeader>
@@ -96,6 +102,7 @@ export default function FlowWizard({ flowTree, onSubmit, onClose }: FlowWizardPr
                         value={ctx.answers[q.id]}
                         onChange={v => runtime.setAnswer(q.id, v)}
                         lookups={ctx.lookups}
+                        ctx={ctx}
                       />
                     );
                   })}
@@ -149,13 +156,16 @@ export default function FlowWizard({ flowTree, onSubmit, onClose }: FlowWizardPr
   );
 }
 
-function QuestionField({ question, value, onChange, lookups }: {
+function QuestionField({ question, value, onChange, lookups, ctx }: {
   question: FlowQuestion;
   value: any;
   onChange: (v: any) => void;
   lookups: Record<string, any>;
+  ctx: any;
 }) {
-  const val = value ?? question.default_value ?? "";
+  // Resolve default value with variables
+  const resolvedDefault = question.default_value ? resolveText(String(question.default_value), ctx) : "";
+  const val = value ?? (resolvedDefault || "");
 
   // Resolve dynamic options
   let options = question.options || [];
@@ -169,21 +179,27 @@ function QuestionField({ question, value, onChange, lookups }: {
     }
   }
 
+  // Resolve label and description with variables
+  const resolvedLabel = resolveText(question.label, ctx);
+  const resolvedDescription = question.description ? resolveText(question.description, ctx) : undefined;
+
   return (
     <div className="space-y-1.5">
-      <Label className="text-sm">
-        {question.label}
-        {question.required && <span className="text-destructive ml-1">*</span>}
-      </Label>
-      {question.description && (
-        <p className="text-xs text-muted-foreground">{question.description}</p>
+      {question.input_type !== "info" && (
+        <Label className="text-sm">
+          {resolvedLabel}
+          {question.required && <span className="text-destructive ml-1">*</span>}
+        </Label>
+      )}
+      {resolvedDescription && question.input_type !== "info" && (
+        <p className="text-xs text-muted-foreground">{resolvedDescription}</p>
       )}
 
       {question.input_type === "text" && (
-        <Input value={val} onChange={e => onChange(e.target.value)} placeholder={question.label} />
+        <Input value={val} onChange={e => onChange(e.target.value)} placeholder={resolvedLabel} />
       )}
       {question.input_type === "textarea" && (
-        <Textarea value={val} onChange={e => onChange(e.target.value)} placeholder={question.label} rows={3} />
+        <Textarea value={val} onChange={e => onChange(e.target.value)} placeholder={resolvedLabel} rows={3} />
       )}
       {question.input_type === "number" && (
         <Input type="number" value={val} onChange={e => onChange(e.target.value)} min={question.validation?.min} max={question.validation?.max} />
@@ -202,9 +218,13 @@ function QuestionField({ question, value, onChange, lookups }: {
       {question.input_type === "radio" && (
         <div className="space-y-1">
           {options.map(o => (
-            <label key={o.value} className="flex items-center gap-2 text-sm cursor-pointer">
-              <input type="radio" name={question.id} checked={val === o.value} onChange={() => onChange(o.value)} className="text-primary" />
-              {o.label}
+            <label key={o.value} className="flex items-start gap-2 text-sm cursor-pointer">
+              <input type="radio" name={question.id} checked={val === o.value} onChange={() => onChange(o.value)} className="text-primary mt-0.5" />
+              <div>
+                <span>{o.label}</span>
+                {o.helptext && <p className="text-xs text-muted-foreground">{o.helptext}</p>}
+                {o.cost != null && <span className="text-xs text-muted-foreground ml-1">({o.cost} kr)</span>}
+              </div>
             </label>
           ))}
         </div>
@@ -212,7 +232,7 @@ function QuestionField({ question, value, onChange, lookups }: {
       {question.input_type === "checkbox" && options.length > 0 && (
         <div className="space-y-1">
           {options.map(o => (
-            <label key={o.value} className="flex items-center gap-2 text-sm cursor-pointer">
+            <label key={o.value} className="flex items-start gap-2 text-sm cursor-pointer">
               <input
                 type="checkbox"
                 checked={Array.isArray(val) && val.includes(o.value)}
@@ -220,7 +240,7 @@ function QuestionField({ question, value, onChange, lookups }: {
                   const current = Array.isArray(val) ? val : [];
                   onChange(e.target.checked ? [...current, o.value] : current.filter((v: string) => v !== o.value));
                 }}
-                className="rounded"
+                className="rounded mt-0.5"
               />
               <div>
                 <span>{o.label}</span>
@@ -234,18 +254,18 @@ function QuestionField({ question, value, onChange, lookups }: {
       {question.input_type === "checkbox" && options.length === 0 && (
         <label className="flex items-center gap-2 text-sm cursor-pointer">
           <input type="checkbox" checked={!!val} onChange={e => onChange(e.target.checked)} className="rounded" />
-          {question.label}
+          {resolvedLabel}
         </label>
       )}
       {question.input_type === "info" && (
         <div className="p-3 rounded-lg bg-muted/50 text-sm text-muted-foreground whitespace-pre-line">
-          {question.description || question.label}
+          {resolvedDescription || resolvedLabel}
         </div>
       )}
       {question.input_type === "multiselect" && (
         <div className="space-y-1">
           {options.map(o => (
-            <label key={o.value} className="flex items-center gap-2 text-sm cursor-pointer">
+            <label key={o.value} className="flex items-start gap-2 text-sm cursor-pointer">
               <input
                 type="checkbox"
                 checked={Array.isArray(val) && val.includes(o.value)}
@@ -253,9 +273,13 @@ function QuestionField({ question, value, onChange, lookups }: {
                   const current = Array.isArray(val) ? val : [];
                   onChange(e.target.checked ? [...current, o.value] : current.filter((v: string) => v !== o.value));
                 }}
-                className="rounded"
+                className="rounded mt-0.5"
               />
-              {o.label}
+              <div>
+                <span>{o.label}</span>
+                {o.helptext && <p className="text-xs text-muted-foreground">{o.helptext}</p>}
+                {o.cost != null && <span className="text-xs text-muted-foreground ml-1">({o.cost} kr)</span>}
+              </div>
             </label>
           ))}
         </div>

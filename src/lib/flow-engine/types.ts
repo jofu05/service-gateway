@@ -85,7 +85,7 @@ export interface FlowAction {
 
 // --- Transition ---
 export interface ConditionExpression {
-  type: "and" | "or" | "equals" | "not_equals" | "contains" | "exists" | "gt" | "lt" | "gte" | "lte" | "has_role" | "in_group" | "string_match";
+  type: "and" | "or" | "not" | "equals" | "not_equals" | "contains" | "exists" | "gt" | "lt" | "gte" | "lte" | "has_role" | "in_group" | "string_match";
   field?: string;
   value?: any;
   children?: ConditionExpression[];
