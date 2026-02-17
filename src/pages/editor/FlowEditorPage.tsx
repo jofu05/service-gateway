@@ -1,9 +1,8 @@
 import { useParams, useNavigate } from "react-router-dom";
-import { useEffect } from "react";
 import { toast } from "sonner";
 import { Loader2 } from "lucide-react";
 import FlowBuilderEditor from "./FlowBuilderEditor";
-import { useFlowVersion, useSaveFlowVersion } from "@/hooks/use-flow-crud";
+import { useFlowVersion, useSaveFlowVersion, usePublishFlow } from "@/hooks/use-flow-crud";
 import type { FlowTree } from "@/lib/flow-engine/types";
 
 export default function FlowEditorPage() {
@@ -11,9 +10,11 @@ export default function FlowEditorPage() {
   const navigate = useNavigate();
   const { data: versionRow, isLoading } = useFlowVersion(id);
   const saveMutation = useSaveFlowVersion();
+  const publishMutation = usePublishFlow();
 
   const initialTree = versionRow?.tree_json as unknown as FlowTree | undefined;
   const currentVersion = versionRow?.version ?? 1;
+  const versionStatus = versionRow?.status as string | undefined;
 
   const handleSave = async (tree: FlowTree) => {
     if (!id) return;
@@ -23,6 +24,20 @@ export default function FlowEditorPage() {
     } catch (e: any) {
       toast.error("Kunde inte spara: " + e.message);
     }
+  };
+
+  const handlePublish = async () => {
+    if (!id || !versionRow) return;
+    try {
+      await publishMutation.mutateAsync({ flowId: id, versionId: versionRow.id });
+      toast.success("Flödet har publicerats!");
+    } catch (e: any) {
+      toast.error("Kunde inte publicera: " + e.message);
+    }
+  };
+
+  const handlePreview = (tree: FlowTree) => {
+    navigate(`/editor/flows/${id}/preview`, { state: { flowTree: tree } });
   };
 
   if (id && isLoading) {
@@ -36,7 +51,10 @@ export default function FlowEditorPage() {
       initialTree={initialTree ?? undefined}
       onSave={handleSave}
       isSaving={saveMutation.isPending}
-      onPreview={() => navigate("/editor/flows/preview")}
+      onPreview={handlePreview}
+      onPublish={handlePublish}
+      isPublishing={publishMutation.isPending}
+      versionStatus={versionStatus}
     />
   );
 }

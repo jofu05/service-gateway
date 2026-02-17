@@ -67,6 +67,7 @@ const App = () => (
               <Route path="/editor/flows" element={<EditorRoute><FlowList /></EditorRoute>} />
               <Route path="/editor/flows/new" element={<EditorRoute><FlowEditorPage /></EditorRoute>} />
               <Route path="/editor/flows/:id" element={<EditorRoute><FlowEditorPage /></EditorRoute>} />
+              <Route path="/editor/flows/:id/preview" element={<EditorRoute><FlowPreviewPage /></EditorRoute>} />
               <Route path="/editor/flows/preview" element={<EditorRoute><FlowPreviewPage /></EditorRoute>} />
               <Route path="/admin/roles" element={<AdminRoute><RoleMapping /></AdminRoute>} />
               <Route path="/admin/logs" element={<AdminRoute><AuditLogs /></AdminRoute>} />

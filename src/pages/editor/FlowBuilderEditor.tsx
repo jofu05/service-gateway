@@ -43,10 +43,13 @@ interface FlowBuilderEditorProps {
   initialTree?: FlowTree;
   onSave?: (tree: FlowTree) => void;
   isSaving?: boolean;
-  onPreview?: () => void;
+  onPreview?: (tree: FlowTree) => void;
+  onPublish?: () => void;
+  isPublishing?: boolean;
+  versionStatus?: string;
 }
 
-export default function FlowBuilderEditor({ flowId, initialTree, onSave, isSaving, onPreview }: FlowBuilderEditorProps) {
+export default function FlowBuilderEditor({ flowId, initialTree, onSave, isSaving, onPreview, onPublish, isPublishing, versionStatus }: FlowBuilderEditorProps) {
   const builder = useFlowBuilder(initialTree);
   const { flow, selectedStep, selectedStepId, setSelectedStepId } = builder;
   const [viewMode, setViewMode] = useState<"graph" | "list">("list");
@@ -65,10 +68,20 @@ export default function FlowBuilderEditor({ flowId, initialTree, onSave, isSavin
           <p className="text-sm text-muted-foreground">{flow.flow.description || "Ingen beskrivning"}</p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" size="sm" onClick={onPreview}>
+          <Button variant="outline" size="sm" onClick={() => onPreview?.(flow)}>
             <Eye className="mr-1 h-4 w-4" /> Förhandsgranska
           </Button>
-          <Button size="sm" onClick={handleSave} disabled={!builder.isDirty || isSaving}>
+          {onPublish && (
+            <Button
+              variant={versionStatus === "published" ? "secondary" : "default"}
+              size="sm"
+              onClick={onPublish}
+              disabled={isPublishing || builder.isDirty}
+            >
+              {isPublishing ? "Publicerar..." : versionStatus === "published" ? "✓ Publicerad" : "Publicera"}
+            </Button>
+          )}
+          <Button size="sm" variant="outline" onClick={handleSave} disabled={!builder.isDirty || isSaving}>
             <Save className="mr-1 h-4 w-4" /> {isSaving ? "Sparar..." : "Spara"}
           </Button>
         </div>
