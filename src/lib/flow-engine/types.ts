@@ -38,7 +38,7 @@ export interface FlowStep {
 export type InputType =
   | "text" | "textarea" | "number" | "date"
   | "select" | "multiselect" | "checkbox" | "radio"
-  | "file" | "autocomplete" | "user" | "ci" | "location";
+  | "file" | "autocomplete" | "user" | "ci" | "location" | "info";
 
 export interface QuestionValidation {
   regex?: string;

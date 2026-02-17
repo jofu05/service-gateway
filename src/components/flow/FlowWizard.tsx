@@ -209,11 +209,38 @@ function QuestionField({ question, value, onChange, lookups }: {
           ))}
         </div>
       )}
-      {question.input_type === "checkbox" && (
+      {question.input_type === "checkbox" && options.length > 0 && (
+        <div className="space-y-1">
+          {options.map(o => (
+            <label key={o.value} className="flex items-center gap-2 text-sm cursor-pointer">
+              <input
+                type="checkbox"
+                checked={Array.isArray(val) && val.includes(o.value)}
+                onChange={e => {
+                  const current = Array.isArray(val) ? val : [];
+                  onChange(e.target.checked ? [...current, o.value] : current.filter((v: string) => v !== o.value));
+                }}
+                className="rounded"
+              />
+              <div>
+                <span>{o.label}</span>
+                {o.helptext && <p className="text-xs text-muted-foreground">{o.helptext}</p>}
+                {o.cost != null && <span className="text-xs text-muted-foreground ml-1">({o.cost} kr)</span>}
+              </div>
+            </label>
+          ))}
+        </div>
+      )}
+      {question.input_type === "checkbox" && options.length === 0 && (
         <label className="flex items-center gap-2 text-sm cursor-pointer">
           <input type="checkbox" checked={!!val} onChange={e => onChange(e.target.checked)} className="rounded" />
           {question.label}
         </label>
+      )}
+      {question.input_type === "info" && (
+        <div className="p-3 rounded-lg bg-muted/50 text-sm text-muted-foreground whitespace-pre-line">
+          {question.description || question.label}
+        </div>
       )}
       {question.input_type === "multiselect" && (
         <div className="space-y-1">

@@ -29,6 +29,7 @@ const INPUT_TYPES: { value: InputType; label: string }[] = [
   { value: "radio", label: "Radioknapp" },
   { value: "file", label: "Fil" },
   { value: "autocomplete", label: "Autocomplete" },
+  { value: "info", label: "Informationstext" },
 ];
 
 const STEP_TYPES: { value: StepType; label: string }[] = [
