@@ -54,7 +54,7 @@ export interface FlowQuestion {
   required: boolean;
   default_value?: any;
   input_type: InputType;
-  options?: { value: string; label: string; helptext?: string }[];
+  options?: { value: string; label: string; helptext?: string; cost?: number }[];
   validation?: QuestionValidation;
   dynamic_options?: { action_id: string; label_key: string; value_key: string };
   visibility_conditions?: ConditionExpression;

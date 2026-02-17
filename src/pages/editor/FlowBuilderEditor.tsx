@@ -417,6 +417,17 @@ function QuestionCard({ question, index, onUpdate, onDelete, onMoveUp, onMoveDow
                       placeholder="Hjälptext (valfritt)"
                       className="h-6 text-[11px] text-muted-foreground border-dashed"
                     />
+                    <Input
+                      type="number"
+                      value={opt.cost ?? ""}
+                      onChange={e => {
+                        const opts = [...(question.options || [])];
+                        opts[oi] = { ...opts[oi], cost: e.target.value ? Number(e.target.value) : undefined };
+                        onUpdate({ options: opts });
+                      }}
+                      placeholder="Kostnad (valfritt)"
+                      className="h-6 text-[11px] text-muted-foreground border-dashed"
+                    />
                   </div>
                   <button
                     onClick={() => {
@@ -434,7 +445,7 @@ function QuestionCard({ question, index, onUpdate, onDelete, onMoveUp, onMoveDow
                 size="sm"
                 className="text-xs w-full"
                 onClick={() => {
-                  const opts = [...(question.options || []), { value: "", label: "", helptext: "" }];
+                  const opts = [...(question.options || []), { value: "", label: "", helptext: "", cost: undefined }];
                   onUpdate({ options: opts });
                 }}
               >
