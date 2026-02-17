@@ -128,3 +128,29 @@ export function useSaveFlowVersion() {
     },
   });
 }
+
+export function usePublishFlow() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ flowId, versionId }: { flowId: string; versionId: string }) => {
+      // Set the version status to published
+      const { error: vErr } = await supabase
+        .from("flow_versions")
+        .update({ status: "published" as const })
+        .eq("id", versionId);
+      if (vErr) throw vErr;
+
+      // Set the flow status to published
+      const { error: fErr } = await supabase
+        .from("flows")
+        .update({ status: "published" as const })
+        .eq("id", flowId);
+      if (fErr) throw fErr;
+    },
+    onSuccess: (_, vars) => {
+      queryClient.invalidateQueries({ queryKey: ["flows"] });
+      queryClient.invalidateQueries({ queryKey: ["flow-version", vars.flowId] });
+    },
+  });
+}
