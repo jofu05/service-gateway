@@ -8,24 +8,9 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { PlusCircle, GitBranch, Pencil, Eye, Copy } from "lucide-react";
+import { PlusCircle, GitBranch, Pencil, Eye, Loader2 } from "lucide-react";
 import { toast } from "sonner";
-
-interface Flow {
-  id: string;
-  name: string;
-  description: string;
-  category: string;
-  status: "draft" | "published" | "archived";
-  version: number;
-  updatedAt: string;
-}
-
-const mockFlows: Flow[] = [
-  { id: "1", name: "IT-Support ärende", description: "Standardflöde för IT-supportärenden", category: "IT-Support", status: "published", version: 2, updatedAt: "2025-01-10" },
-  { id: "2", name: "Beställning av utrustning", description: "Flöde för att beställa IT-utrustning", category: "Beställning", status: "draft", version: 1, updatedAt: "2025-01-15" },
-  { id: "3", name: "Behörighetsansökan", description: "Ansökan om systemåtkomst", category: "Behörighet", status: "published", version: 3, updatedAt: "2025-01-08" },
-];
+import { useFlows, useCreateFlow } from "@/hooks/use-flow-crud";
 
 const statusColors: Record<string, string> = {
   draft: "bg-warning/10 text-warning border-warning/30",
@@ -35,14 +20,25 @@ const statusColors: Record<string, string> = {
 const statusLabels: Record<string, string> = { draft: "Utkast", published: "Publicerad", archived: "Arkiverad" };
 
 export default function FlowList() {
-  const [flows] = useState<Flow[]>(mockFlows);
+  const { data: flows, isLoading } = useFlows();
+  const createFlow = useCreateFlow();
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [newName, setNewName] = useState("");
+  const [newDesc, setNewDesc] = useState("");
+  const [newCategory, setNewCategory] = useState("");
   const navigate = useNavigate();
 
-  const handleCreate = () => {
-    toast.success("Flöde skapat (mock)");
-    setDialogOpen(false);
-    navigate("/editor/flows/new");
+  const handleCreate = async () => {
+    if (!newName.trim()) { toast.error("Ange ett namn"); return; }
+    try {
+      const flow = await createFlow.mutateAsync({ name: newName, description: newDesc, category: newCategory });
+      toast.success("Flöde skapat");
+      setDialogOpen(false);
+      setNewName(""); setNewDesc(""); setNewCategory("");
+      navigate(`/editor/flows/${flow.id}`);
+    } catch (e: any) {
+      toast.error("Kunde inte skapa flöde: " + e.message);
+    }
   };
 
   return (
@@ -60,10 +56,10 @@ export default function FlowList() {
             <DialogContent>
               <DialogHeader><DialogTitle className="font-heading">Skapa nytt flöde</DialogTitle></DialogHeader>
               <div className="space-y-4">
-                <div><Label>Namn</Label><Input placeholder="Namn på flödet" /></div>
-                <div><Label>Beskrivning</Label><Textarea placeholder="Beskriv flödet" /></div>
+                <div><Label>Namn</Label><Input value={newName} onChange={e => setNewName(e.target.value)} placeholder="Namn på flödet" /></div>
+                <div><Label>Beskrivning</Label><Textarea value={newDesc} onChange={e => setNewDesc(e.target.value)} placeholder="Beskriv flödet" /></div>
                 <div><Label>Kategori</Label>
-                  <Select>
+                  <Select value={newCategory} onValueChange={setNewCategory}>
                     <SelectTrigger><SelectValue placeholder="Välj kategori" /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="IT-Support">IT-Support</SelectItem>
@@ -72,44 +68,53 @@ export default function FlowList() {
                     </SelectContent>
                   </Select>
                 </div>
-                <Button onClick={handleCreate} className="w-full">Skapa</Button>
+                <Button onClick={handleCreate} className="w-full" disabled={createFlow.isPending}>
+                  {createFlow.isPending && <Loader2 className="mr-1 h-4 w-4 animate-spin" />}
+                  Skapa
+                </Button>
               </div>
             </DialogContent>
           </Dialog>
         </div>
       </div>
 
-      <div className="space-y-3">
-        {flows.map(f => (
-          <Card key={f.id} className="hover:shadow-sm transition-shadow">
-            <CardContent className="flex items-center gap-4 p-4">
-              <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
-                <GitBranch className="h-5 w-5 text-primary" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 mb-0.5">
-                  <p className="font-heading font-semibold">{f.name}</p>
-                  <Badge variant="outline" className={statusColors[f.status]}>{statusLabels[f.status]}</Badge>
+      {isLoading ? (
+        <div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>
+      ) : !flows?.length ? (
+        <Card><CardContent className="py-12 text-center text-muted-foreground">Inga flöden ännu. Skapa ett nytt!</CardContent></Card>
+      ) : (
+        <div className="space-y-3">
+          {flows.map(f => (
+            <Card key={f.id} className="hover:shadow-sm transition-shadow">
+              <CardContent className="flex items-center gap-4 p-4">
+                <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+                  <GitBranch className="h-5 w-5 text-primary" />
                 </div>
-                <p className="text-sm text-muted-foreground truncate">{f.description}</p>
-                <div className="flex gap-3 mt-1 text-xs text-muted-foreground">
-                  <span>{f.category}</span>
-                  <span>v{f.version}</span>
-                  <span>Uppdaterad {f.updatedAt}</span>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 mb-0.5">
+                    <p className="font-heading font-semibold">{f.name}</p>
+                    <Badge variant="outline" className={statusColors[f.status]}>{statusLabels[f.status]}</Badge>
+                  </div>
+                  <p className="text-sm text-muted-foreground truncate">{f.description}</p>
+                  <div className="flex gap-3 mt-1 text-xs text-muted-foreground">
+                    <span>{f.category}</span>
+                    {f.current_version && <span>v{f.current_version}</span>}
+                    <span>Uppdaterad {new Date(f.updated_at).toLocaleDateString("sv-SE")}</span>
+                  </div>
                 </div>
-              </div>
-              <div className="flex gap-1">
-                <Button variant="ghost" size="sm" onClick={() => navigate(`/editor/flows/${f.id}`)}>
-                  <Pencil className="h-4 w-4" />
-                </Button>
-                <Button variant="ghost" size="sm" onClick={() => navigate("/editor/flows/preview")}>
-                  <Eye className="h-4 w-4" />
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
+                <div className="flex gap-1">
+                  <Button variant="ghost" size="sm" onClick={() => navigate(`/editor/flows/${f.id}`)}>
+                    <Pencil className="h-4 w-4" />
+                  </Button>
+                  <Button variant="ghost" size="sm" onClick={() => navigate("/editor/flows/preview")}>
+                    <Eye className="h-4 w-4" />
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

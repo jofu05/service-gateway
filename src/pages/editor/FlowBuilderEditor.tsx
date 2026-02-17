@@ -1,6 +1,5 @@
 import { useFlowBuilder } from "@/hooks/use-flow-builder";
-import { sampleIncidentFlow } from "@/lib/flow-engine/sample-flow";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -16,7 +15,7 @@ import {
   Eye, Save, ChevronRight, Zap, HelpCircle, GitBranch
 } from "lucide-react";
 import { toast } from "sonner";
-import type { FlowStep, FlowQuestion, InputType, StepType } from "@/lib/flow-engine/types";
+import type { FlowStep, FlowQuestion, FlowTree, InputType, StepType } from "@/lib/flow-engine/types";
 import { useState } from "react";
 
 const INPUT_TYPES: { value: InputType; label: string }[] = [
@@ -41,19 +40,20 @@ const STEP_TYPES: { value: StepType; label: string }[] = [
 
 interface FlowBuilderEditorProps {
   flowId?: string;
-  onSave?: (tree: any) => void;
+  initialTree?: FlowTree;
+  onSave?: (tree: FlowTree) => void;
+  isSaving?: boolean;
   onPreview?: () => void;
 }
 
-export default function FlowBuilderEditor({ flowId, onSave, onPreview }: FlowBuilderEditorProps) {
-  const builder = useFlowBuilder(sampleIncidentFlow);
+export default function FlowBuilderEditor({ flowId, initialTree, onSave, isSaving, onPreview }: FlowBuilderEditorProps) {
+  const builder = useFlowBuilder(initialTree);
   const { flow, selectedStep, selectedStepId, setSelectedStepId } = builder;
   const [viewMode, setViewMode] = useState<"graph" | "list">("list");
 
   const handleSave = () => {
     onSave?.(flow);
     builder.setIsDirty(false);
-    toast.success("Flöde sparat (mock)");
   };
 
   return (
@@ -68,8 +68,8 @@ export default function FlowBuilderEditor({ flowId, onSave, onPreview }: FlowBui
           <Button variant="outline" size="sm" onClick={onPreview}>
             <Eye className="mr-1 h-4 w-4" /> Förhandsgranska
           </Button>
-          <Button size="sm" onClick={handleSave} disabled={!builder.isDirty}>
-            <Save className="mr-1 h-4 w-4" /> Spara
+          <Button size="sm" onClick={handleSave} disabled={!builder.isDirty || isSaving}>
+            <Save className="mr-1 h-4 w-4" /> {isSaving ? "Sparar..." : "Spara"}
           </Button>
         </div>
       </div>
