@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { useNavigate } from "react-router-dom";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -7,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { PlusCircle, GitBranch, Pencil } from "lucide-react";
+import { PlusCircle, GitBranch, Pencil, Eye, Copy } from "lucide-react";
 import { toast } from "sonner";
 
 interface Flow {
@@ -36,39 +37,46 @@ const statusLabels: Record<string, string> = { draft: "Utkast", published: "Publ
 export default function FlowList() {
   const [flows] = useState<Flow[]>(mockFlows);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const navigate = useNavigate();
 
   const handleCreate = () => {
     toast.success("Flöde skapat (mock)");
     setDialogOpen(false);
+    navigate("/editor/flows/new");
   };
 
   return (
     <div className="space-y-6 animate-fade-in">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-heading font-bold">Flöden</h1>
-        <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-          <DialogTrigger asChild>
-            <Button><PlusCircle className="mr-1 h-4 w-4" /> Nytt flöde</Button>
-          </DialogTrigger>
-          <DialogContent>
-            <DialogHeader><DialogTitle className="font-heading">Skapa nytt flöde</DialogTitle></DialogHeader>
-            <div className="space-y-4">
-              <div><Label>Namn</Label><Input placeholder="Namn på flödet" /></div>
-              <div><Label>Beskrivning</Label><Textarea placeholder="Beskriv flödet" /></div>
-              <div><Label>Kategori</Label>
-                <Select>
-                  <SelectTrigger><SelectValue placeholder="Välj kategori" /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="IT-Support">IT-Support</SelectItem>
-                    <SelectItem value="Beställning">Beställning</SelectItem>
-                    <SelectItem value="Behörighet">Behörighet</SelectItem>
-                  </SelectContent>
-                </Select>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={() => navigate("/editor/flows/preview")}>
+            <Eye className="mr-1 h-4 w-4" /> Testa flöde
+          </Button>
+          <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+            <DialogTrigger asChild>
+              <Button><PlusCircle className="mr-1 h-4 w-4" /> Nytt flöde</Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader><DialogTitle className="font-heading">Skapa nytt flöde</DialogTitle></DialogHeader>
+              <div className="space-y-4">
+                <div><Label>Namn</Label><Input placeholder="Namn på flödet" /></div>
+                <div><Label>Beskrivning</Label><Textarea placeholder="Beskriv flödet" /></div>
+                <div><Label>Kategori</Label>
+                  <Select>
+                    <SelectTrigger><SelectValue placeholder="Välj kategori" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="IT-Support">IT-Support</SelectItem>
+                      <SelectItem value="Beställning">Beställning</SelectItem>
+                      <SelectItem value="Behörighet">Behörighet</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <Button onClick={handleCreate} className="w-full">Skapa</Button>
               </div>
-              <Button onClick={handleCreate} className="w-full">Skapa</Button>
-            </div>
-          </DialogContent>
-        </Dialog>
+            </DialogContent>
+          </Dialog>
+        </div>
       </div>
 
       <div className="space-y-3">
@@ -90,7 +98,14 @@ export default function FlowList() {
                   <span>Uppdaterad {f.updatedAt}</span>
                 </div>
               </div>
-              <Button variant="ghost" size="sm"><Pencil className="h-4 w-4" /></Button>
+              <div className="flex gap-1">
+                <Button variant="ghost" size="sm" onClick={() => navigate(`/editor/flows/${f.id}`)}>
+                  <Pencil className="h-4 w-4" />
+                </Button>
+                <Button variant="ghost" size="sm" onClick={() => navigate("/editor/flows/preview")}>
+                  <Eye className="h-4 w-4" />
+                </Button>
+              </div>
             </CardContent>
           </Card>
         ))}

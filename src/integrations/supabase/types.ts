@@ -14,6 +14,47 @@ export type Database = {
   }
   public: {
     Tables: {
+      ai_logs: {
+        Row: {
+          accepted: boolean | null
+          created_at: string
+          id: string
+          input_meta: Json | null
+          output_suggestions: Json | null
+          step_id: string
+          submission_id: string | null
+          trigger: string
+        }
+        Insert: {
+          accepted?: boolean | null
+          created_at?: string
+          id?: string
+          input_meta?: Json | null
+          output_suggestions?: Json | null
+          step_id: string
+          submission_id?: string | null
+          trigger: string
+        }
+        Update: {
+          accepted?: boolean | null
+          created_at?: string
+          id?: string
+          input_meta?: Json | null
+          output_suggestions?: Json | null
+          step_id?: string
+          submission_id?: string | null
+          trigger?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ai_logs_submission_id_fkey"
+            columns: ["submission_id"]
+            isOneToOne: false
+            referencedRelation: "submissions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       audit_logs: {
         Row: {
           action: string
@@ -46,6 +87,7 @@ export type Database = {
       }
       flow_versions: {
         Row: {
+          ai_config_json: Json | null
           created_at: string
           created_by: string | null
           flow_id: string
@@ -56,6 +98,7 @@ export type Database = {
           version: number
         }
         Insert: {
+          ai_config_json?: Json | null
           created_at?: string
           created_by?: string | null
           flow_id: string
@@ -66,6 +109,7 @@ export type Database = {
           version: number
         }
         Update: {
+          ai_config_json?: Json | null
           created_at?: string
           created_by?: string | null
           flow_id?: string
@@ -192,6 +236,7 @@ export type Database = {
           id: string
           pob_status_cache: string | null
           pob_ticket_id: string | null
+          runtime_context_json: Json | null
           updated_at: string
           user_id: string
         }
@@ -202,6 +247,7 @@ export type Database = {
           id?: string
           pob_status_cache?: string | null
           pob_ticket_id?: string | null
+          runtime_context_json?: Json | null
           updated_at?: string
           user_id: string
         }
@@ -212,6 +258,7 @@ export type Database = {
           id?: string
           pob_status_cache?: string | null
           pob_ticket_id?: string | null
+          runtime_context_json?: Json | null
           updated_at?: string
           user_id?: string
         }
