@@ -22,6 +22,8 @@ export function evaluateCondition(condition: ConditionExpression, ctx: RuntimeCo
       return (condition.children ?? []).every(c => evaluateCondition(c, ctx));
     case "or":
       return (condition.children ?? []).some(c => evaluateCondition(c, ctx));
+    case "not":
+      return !(condition.children ?? []).every(c => evaluateCondition(c, ctx));
     case "equals":
       return resolvePath(ctx, condition.field!) === condition.value;
     case "not_equals":

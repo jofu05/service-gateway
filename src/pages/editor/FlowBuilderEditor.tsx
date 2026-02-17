@@ -7,16 +7,20 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import {
-  PlusCircle, Trash2, GripVertical, ArrowRight, Settings2,
-  Eye, Save, ChevronRight, Zap, HelpCircle, GitBranch
+  PlusCircle, Trash2, ArrowRight, Settings2,
+  Eye, Save, ChevronRight, ChevronDown, Zap, HelpCircle, GitBranch,
+  Filter, Braces, MessageSquare
 } from "lucide-react";
 import { toast } from "sonner";
-import type { FlowStep, FlowQuestion, FlowTree, InputType, StepType } from "@/lib/flow-engine/types";
+import type { FlowStep, FlowQuestion, FlowTree, InputType, StepType, ConditionExpression } from "@/lib/flow-engine/types";
 import { useState } from "react";
+import RuleBuilder from "@/components/editor/RuleBuilder";
+import VariablePicker, { TextWithVariables } from "@/components/editor/VariablePicker";
+import DataPanel from "@/components/editor/DataPanel";
 
 const INPUT_TYPES: { value: InputType; label: string }[] = [
   { value: "text", label: "Text" },
@@ -53,7 +57,6 @@ interface FlowBuilderEditorProps {
 export default function FlowBuilderEditor({ flowId, initialTree, onSave, isSaving, onPreview, onPublish, isPublishing, versionStatus }: FlowBuilderEditorProps) {
   const builder = useFlowBuilder(initialTree);
   const { flow, selectedStep, selectedStepId, setSelectedStepId } = builder;
-  const [viewMode, setViewMode] = useState<"graph" | "list">("list");
 
   const handleSave = () => {
     onSave?.(flow);
@@ -128,7 +131,7 @@ export default function FlowBuilderEditor({ flowId, initialTree, onSave, isSavin
       </Card>
 
       {/* Main editor area */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
         {/* Step list */}
         <div className="lg:col-span-1 space-y-2">
           <div className="flex items-center justify-between mb-2">
@@ -160,6 +163,9 @@ export default function FlowBuilderEditor({ flowId, initialTree, onSave, isSavin
                           {STEP_TYPES.find(t => t.value === step.type)?.label}
                         </Badge>
                         <span className="text-[10px] text-muted-foreground">{step.questions.length} frågor</span>
+                        {step.transitions.some(t => t.condition) && (
+                          <Filter className="h-2.5 w-2.5 text-accent" />
+                        )}
                       </div>
                     </div>
                     {step.transitions.length > 0 && (
@@ -170,12 +176,15 @@ export default function FlowBuilderEditor({ flowId, initialTree, onSave, isSavin
               ))}
             </div>
           </ScrollArea>
+
+          {/* Data panel */}
+          <DataPanel flowTree={flow} currentStepId={selectedStepId ?? undefined} />
         </div>
 
         {/* Step editor */}
-        <div className="lg:col-span-2">
+        <div className="lg:col-span-3">
           {selectedStep ? (
-            <StepEditor step={selectedStep} builder={builder} allSteps={flow.steps} />
+            <StepEditor step={selectedStep} builder={builder} allSteps={flow.steps} flowTree={flow} />
           ) : (
             <Card className="h-[500px] flex items-center justify-center">
               <div className="text-center text-muted-foreground">
@@ -190,30 +199,33 @@ export default function FlowBuilderEditor({ flowId, initialTree, onSave, isSavin
   );
 }
 
-function StepEditor({ step, builder, allSteps }: {
+function StepEditor({ step, builder, allSteps, flowTree }: {
   step: FlowStep;
   builder: ReturnType<typeof useFlowBuilder>;
   allSteps: FlowStep[];
+  flowTree: FlowTree;
 }) {
   return (
     <Card>
       <CardHeader className="pb-3">
         <div className="flex items-center justify-between">
           <div className="flex-1 space-y-2">
-            <Input
+            <TextWithVariables
               value={step.title}
-              onChange={e => builder.updateStep(step.id, { title: e.target.value })}
-              className="text-lg font-heading font-semibold border-none p-0 h-auto focus-visible:ring-0"
-              placeholder="Stegtitel"
+              onChange={v => builder.updateStep(step.id, { title: v })}
+              placeholder="Stegtitel (stöder {{variabler}})"
+              flowTree={flowTree}
+              currentStepId={step.id}
             />
-            <Input
+            <TextWithVariables
               value={step.description}
-              onChange={e => builder.updateStep(step.id, { description: e.target.value })}
-              className="text-sm text-muted-foreground border-none p-0 h-auto focus-visible:ring-0"
-              placeholder="Beskrivning..."
+              onChange={v => builder.updateStep(step.id, { description: v })}
+              placeholder="Beskrivning (stöder {{variabler}})"
+              flowTree={flowTree}
+              currentStepId={step.id}
             />
           </div>
-          <Button variant="ghost" size="icon" className="text-destructive" onClick={() => builder.deleteStep(step.id)}>
+          <Button variant="ghost" size="icon" className="text-destructive ml-2" onClick={() => builder.deleteStep(step.id)}>
             <Trash2 className="h-4 w-4" />
           </Button>
         </div>
@@ -235,18 +247,38 @@ function StepEditor({ step, builder, allSteps }: {
             </SelectContent>
           </Select>
         </div>
+        {/* Help text with variables */}
+        <div className="mt-2">
+          <Label className="text-xs text-muted-foreground">Hjälptext (visas för användaren)</Label>
+          <TextWithVariables
+            value={step.helptext || ""}
+            onChange={v => builder.updateStep(step.id, { helptext: v })}
+            placeholder="T.ex. Hej {{user.displayName}}, fyll i uppgifterna nedan..."
+            flowTree={flowTree}
+            currentStepId={step.id}
+          />
+        </div>
       </CardHeader>
 
       <CardContent>
         <Tabs defaultValue="questions">
           <TabsList className="w-full">
-            <TabsTrigger value="questions" className="flex-1">Frågor ({step.questions.length})</TabsTrigger>
-            <TabsTrigger value="actions" className="flex-1">Actions ({step.pre_actions.length + step.post_actions.length})</TabsTrigger>
-            <TabsTrigger value="transitions" className="flex-1">Övergångar ({step.transitions.length})</TabsTrigger>
+            <TabsTrigger value="questions" className="flex-1">
+              <MessageSquare className="mr-1 h-3 w-3" />
+              Frågor ({step.questions.length})
+            </TabsTrigger>
+            <TabsTrigger value="rules" className="flex-1">
+              <Filter className="mr-1 h-3 w-3" />
+              Regler ({step.transitions.filter(t => t.condition).length})
+            </TabsTrigger>
+            <TabsTrigger value="actions" className="flex-1">
+              <Zap className="mr-1 h-3 w-3" />
+              Åtgärder ({step.pre_actions.length + step.post_actions.length})
+            </TabsTrigger>
           </TabsList>
 
           <TabsContent value="questions" className="mt-3">
-            <ScrollArea className="h-[340px]">
+            <ScrollArea className="h-[400px]">
               <div className="space-y-2 pr-2">
                 {step.questions.map((q, idx) => (
                   <QuestionCard
@@ -257,6 +289,8 @@ function StepEditor({ step, builder, allSteps }: {
                     onDelete={() => builder.deleteQuestion(step.id, q.id)}
                     onMoveUp={idx > 0 ? () => builder.moveQuestion(step.id, idx, idx - 1) : undefined}
                     onMoveDown={idx < step.questions.length - 1 ? () => builder.moveQuestion(step.id, idx, idx + 1) : undefined}
+                    flowTree={flowTree}
+                    currentStepId={step.id}
                   />
                 ))}
                 {step.questions.length === 0 && (
@@ -269,10 +303,29 @@ function StepEditor({ step, builder, allSteps }: {
             </Button>
           </TabsContent>
 
+          <TabsContent value="rules" className="mt-3">
+            <TransitionEditor
+              step={step}
+              allSteps={allSteps}
+              flowTree={flowTree}
+              onAddTransition={() => builder.addTransition(step.id)}
+              onUpdateTransition={(tId, updates) => {
+                builder.updateStep(step.id, {
+                  transitions: step.transitions.map(t => t.id === tId ? { ...t, ...updates } : t),
+                });
+              }}
+              onDeleteTransition={(tId) => {
+                builder.updateStep(step.id, {
+                  transitions: step.transitions.filter(t => t.id !== tId),
+                });
+              }}
+            />
+          </TabsContent>
+
           <TabsContent value="actions" className="mt-3">
             <div className="space-y-3">
               <div>
-                <h4 className="text-xs font-medium text-muted-foreground uppercase mb-1">Pre-actions (körs vid stegöppning)</h4>
+                <h4 className="text-xs font-medium text-muted-foreground uppercase mb-1">Vid stegöppning</h4>
                 {step.pre_actions.map(a => (
                   <div key={a.id} className="flex items-center gap-2 p-2 border rounded-md text-sm mb-1">
                     <Zap className="h-3 w-3 text-warning" />
@@ -281,12 +334,12 @@ function StepEditor({ step, builder, allSteps }: {
                   </div>
                 ))}
                 <Button variant="ghost" size="sm" className="text-xs" onClick={() => builder.addAction(step.id, "pre_step")}>
-                  <PlusCircle className="mr-1 h-3 w-3" /> Lägg till pre-action
+                  <PlusCircle className="mr-1 h-3 w-3" /> Lägg till
                 </Button>
               </div>
               <Separator />
               <div>
-                <h4 className="text-xs font-medium text-muted-foreground uppercase mb-1">Post-actions (körs vid "Nästa")</h4>
+                <h4 className="text-xs font-medium text-muted-foreground uppercase mb-1">Vid "Nästa"</h4>
                 {step.post_actions.map(a => (
                   <div key={a.id} className="flex items-center gap-2 p-2 border rounded-md text-sm mb-1">
                     <Zap className="h-3 w-3 text-info" />
@@ -295,28 +348,9 @@ function StepEditor({ step, builder, allSteps }: {
                   </div>
                 ))}
                 <Button variant="ghost" size="sm" className="text-xs" onClick={() => builder.addAction(step.id, "post_step")}>
-                  <PlusCircle className="mr-1 h-3 w-3" /> Lägg till post-action
+                  <PlusCircle className="mr-1 h-3 w-3" /> Lägg till
                 </Button>
               </div>
-            </div>
-          </TabsContent>
-
-          <TabsContent value="transitions" className="mt-3">
-            <div className="space-y-2">
-              {step.transitions.map(t => (
-                <div key={t.id} className="flex items-center gap-2 p-2 border rounded-md text-sm">
-                  <ChevronRight className="h-3 w-3 text-primary" />
-                  <span className="flex-1">
-                    {t.is_default ? "Standard" : "Villkorad"} → {allSteps.find(s => s.id === t.next_step_id)?.title || t.next_step_id || "(ej valt)"}
-                  </span>
-                  {t.condition && (
-                    <Badge variant="outline" className="text-[10px]">{t.condition.type}: {t.condition.field}</Badge>
-                  )}
-                </div>
-              ))}
-              <Button variant="ghost" size="sm" className="text-xs" onClick={() => builder.addTransition(step.id)}>
-                <PlusCircle className="mr-1 h-3 w-3" /> Lägg till övergång
-              </Button>
             </div>
           </TabsContent>
         </Tabs>
@@ -325,18 +359,99 @@ function StepEditor({ step, builder, allSteps }: {
   );
 }
 
-function QuestionCard({ question, index, onUpdate, onDelete, onMoveUp, onMoveDown }: {
+function TransitionEditor({ step, allSteps, flowTree, onAddTransition, onUpdateTransition, onDeleteTransition }: {
+  step: FlowStep;
+  allSteps: FlowStep[];
+  flowTree: FlowTree;
+  onAddTransition: () => void;
+  onUpdateTransition: (id: string, updates: any) => void;
+  onDeleteTransition: (id: string) => void;
+}) {
+  return (
+    <div className="space-y-3">
+      <p className="text-xs text-muted-foreground">
+        Bestäm vad som händer när användaren klickar "Nästa". Utan regler går flödet till nästa steg i ordningen.
+      </p>
+
+      {step.transitions.map((t, i) => (
+        <div key={t.id} className="border rounded-lg p-3 space-y-3 bg-card">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Badge variant={t.is_default ? "secondary" : "outline"} className="text-[11px]">
+                {t.is_default ? "Standard" : `Regel ${i + 1}`}
+              </Badge>
+            </div>
+            <div className="flex items-center gap-1">
+              <label className="flex items-center gap-1 text-xs">
+                <input
+                  type="checkbox"
+                  checked={t.is_default || false}
+                  onChange={e => onUpdateTransition(t.id, { is_default: e.target.checked, condition: e.target.checked ? undefined : t.condition })}
+                  className="rounded"
+                />
+                Standard
+              </label>
+              <Button variant="ghost" size="sm" className="h-6 w-6 p-0 text-destructive/60 hover:text-destructive" onClick={() => onDeleteTransition(t.id)}>
+                <Trash2 className="h-3 w-3" />
+              </Button>
+            </div>
+          </div>
+
+          {/* Condition builder */}
+          {!t.is_default && (
+            <div>
+              <Label className="text-xs text-muted-foreground mb-1 block">När detta villkor uppfylls:</Label>
+              <RuleBuilder
+                condition={t.condition}
+                onChange={c => onUpdateTransition(t.id, { condition: c })}
+                flowTree={flowTree}
+                currentStepId={step.id}
+              />
+            </div>
+          )}
+
+          {/* Target step */}
+          <div className="flex items-center gap-2">
+            <ArrowRight className="h-3 w-3 text-primary shrink-0" />
+            <span className="text-xs text-muted-foreground shrink-0">Gå till:</span>
+            <Select value={t.next_step_id || ""} onValueChange={v => onUpdateTransition(t.id, { next_step_id: v })}>
+              <SelectTrigger className="h-7 text-xs">
+                <SelectValue placeholder="Välj steg..." />
+              </SelectTrigger>
+              <SelectContent>
+                {allSteps.filter(s => s.id !== step.id).map((s, si) => (
+                  <SelectItem key={s.id} value={s.id}>
+                    Steg {allSteps.indexOf(s) + 1}: {s.title}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+      ))}
+
+      <Button variant="outline" size="sm" className="w-full" onClick={onAddTransition}>
+        <PlusCircle className="mr-1 h-3 w-3" /> Lägg till navigeringsregel
+      </Button>
+    </div>
+  );
+}
+
+function QuestionCard({ question, index, onUpdate, onDelete, onMoveUp, onMoveDown, flowTree, currentStepId }: {
   question: FlowQuestion;
   index: number;
   onUpdate: (u: Partial<FlowQuestion>) => void;
   onDelete: () => void;
   onMoveUp?: () => void;
   onMoveDown?: () => void;
+  flowTree: FlowTree;
+  currentStepId: string;
 }) {
   const [expanded, setExpanded] = useState(false);
+  const hasVisibility = !!question.visibility_conditions;
 
   return (
-    <div className="border rounded-lg p-3 bg-card">
+    <div className={`border rounded-lg p-3 bg-card ${hasVisibility ? "border-l-2 border-l-accent" : ""}`}>
       <div className="flex items-center gap-2">
         <div className="flex flex-col gap-0.5">
           {onMoveUp && <button onClick={onMoveUp} className="text-muted-foreground hover:text-foreground text-xs">▲</button>}
@@ -364,8 +479,13 @@ function QuestionCard({ question, index, onUpdate, onDelete, onMoveUp, onMoveDow
           />
           Obl.
         </label>
+        {hasVisibility && (
+          <Badge variant="outline" className="text-[10px] border-accent text-accent">
+            <Filter className="mr-0.5 h-2.5 w-2.5" /> Villkor
+          </Badge>
+        )}
         <button onClick={() => setExpanded(!expanded)} className="text-muted-foreground hover:text-foreground">
-          <Settings2 className="h-3 w-3" />
+          {expanded ? <ChevronDown className="h-3 w-3" /> : <Settings2 className="h-3 w-3" />}
         </button>
         <button onClick={onDelete} className="text-destructive/60 hover:text-destructive">
           <Trash2 className="h-3 w-3" />
@@ -373,16 +493,32 @@ function QuestionCard({ question, index, onUpdate, onDelete, onMoveUp, onMoveDow
       </div>
 
       {expanded && (
-        <div className="mt-2 pt-2 border-t space-y-2">
+        <div className="mt-3 pt-3 border-t space-y-3">
+          {/* Description with variable support */}
           <div>
-            <Label className="text-xs">Beskrivning</Label>
-            <Input
+            <Label className="text-xs">Beskrivning / hjälptext</Label>
+            <TextWithVariables
               value={question.description || ""}
-              onChange={e => onUpdate({ description: e.target.value })}
-              placeholder="Hjälptext"
-              className="h-7 text-xs"
+              onChange={v => onUpdate({ description: v })}
+              placeholder="Hjälptext (stöder {{variabler}})"
+              flowTree={flowTree}
+              currentStepId={currentStepId}
             />
           </div>
+
+          {/* Default value */}
+          <div>
+            <Label className="text-xs">Standardvärde</Label>
+            <TextWithVariables
+              value={question.default_value ?? ""}
+              onChange={v => onUpdate({ default_value: v })}
+              placeholder="T.ex. {{answers.q-xxx}} eller fast värde"
+              flowTree={flowTree}
+              currentStepId={currentStepId}
+            />
+          </div>
+
+          {/* Mapping key */}
           <div>
             <Label className="text-xs">Mapping-nyckel (POB)</Label>
             <Input
@@ -392,6 +528,26 @@ function QuestionCard({ question, index, onUpdate, onDelete, onMoveUp, onMoveDow
               className="h-7 text-xs"
             />
           </div>
+
+          {/* Visibility conditions */}
+          <Collapsible>
+            <CollapsibleTrigger className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground hover:text-foreground w-full">
+              <Filter className="h-3 w-3" />
+              Visa frågan bara om...
+              <ChevronRight className="h-3 w-3 ml-auto" />
+            </CollapsibleTrigger>
+            <CollapsibleContent className="mt-2">
+              <RuleBuilder
+                condition={question.visibility_conditions}
+                onChange={c => onUpdate({ visibility_conditions: c })}
+                flowTree={flowTree}
+                currentStepId={currentStepId}
+                compact
+              />
+            </CollapsibleContent>
+          </Collapsible>
+
+          {/* Options for select/radio/multiselect/checkbox */}
           {(question.input_type === "select" || question.input_type === "radio" || question.input_type === "multiselect" || question.input_type === "checkbox") && (
             <div className="space-y-2">
               <Label className="text-xs">Alternativ</Label>
