@@ -28,6 +28,20 @@ function ProtectedRoutes() {
   return <AppLayout />;
 }
 
+function EditorRoute({ children }: { children: React.ReactNode }) {
+  const { hasRole, loading } = useAuth();
+  if (loading) return null;
+  if (!hasRole('editor') && !hasRole('admin')) return <Navigate to="/" replace />;
+  return <>{children}</>;
+}
+
+function AdminRoute({ children }: { children: React.ReactNode }) {
+  const { hasRole, loading } = useAuth();
+  if (loading) return null;
+  if (!hasRole('admin')) return <Navigate to="/" replace />;
+  return <>{children}</>;
+}
+
 function AuthRoute() {
   const { user, loading } = useAuth();
   if (loading) return null;
@@ -50,13 +64,13 @@ const App = () => (
               <Route path="/tickets" element={<MyTickets />} />
               <Route path="/tickets/:id" element={<TicketDetail />} />
               <Route path="/stats" element={<Statistics />} />
-              <Route path="/editor/flows" element={<FlowList />} />
-              <Route path="/editor/flows/new" element={<FlowEditorPage />} />
-              <Route path="/editor/flows/:id" element={<FlowEditorPage />} />
-              <Route path="/editor/flows/preview" element={<FlowPreviewPage />} />
-              <Route path="/admin/roles" element={<RoleMapping />} />
-              <Route path="/admin/logs" element={<AuditLogs />} />
-              <Route path="/admin/settings" element={<IntegrationSettings />} />
+              <Route path="/editor/flows" element={<EditorRoute><FlowList /></EditorRoute>} />
+              <Route path="/editor/flows/new" element={<EditorRoute><FlowEditorPage /></EditorRoute>} />
+              <Route path="/editor/flows/:id" element={<EditorRoute><FlowEditorPage /></EditorRoute>} />
+              <Route path="/editor/flows/preview" element={<EditorRoute><FlowPreviewPage /></EditorRoute>} />
+              <Route path="/admin/roles" element={<AdminRoute><RoleMapping /></AdminRoute>} />
+              <Route path="/admin/logs" element={<AdminRoute><AuditLogs /></AdminRoute>} />
+              <Route path="/admin/settings" element={<AdminRoute><IntegrationSettings /></AdminRoute>} />
             </Route>
             <Route path="*" element={<NotFound />} />
           </Routes>

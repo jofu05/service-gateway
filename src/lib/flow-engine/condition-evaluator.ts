@@ -49,8 +49,13 @@ export function evaluateCondition(condition: ConditionExpression, ctx: RuntimeCo
     case "string_match": {
       const val = resolvePath(ctx, condition.field!);
       if (typeof val !== "string") return false;
+      const pattern = condition.value;
+      // Guard against ReDoS: reject overly long or dangerous patterns
+      if (typeof pattern !== "string" || pattern.length > 100) return false;
+      const dangerous = /\(([^)]*[+*])\)[+*]|\(\?[^)]*\)\{/;
+      if (dangerous.test(pattern)) return false;
       try {
-        return new RegExp(condition.value).test(val);
+        return new RegExp(pattern).test(val);
       } catch {
         return false;
       }
