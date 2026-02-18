@@ -4,7 +4,6 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -12,15 +11,15 @@ import { Separator } from "@/components/ui/separator";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import {
   PlusCircle, Trash2, ArrowRight, Settings2,
-  Eye, Save, ChevronRight, ChevronDown, Zap, HelpCircle, GitBranch,
-  Filter, Braces, MessageSquare
+  Eye, Save, ChevronRight, ChevronDown, Zap, GitBranch,
+  Filter, MessageSquare, X, Settings
 } from "lucide-react";
 import { toast } from "sonner";
-import type { FlowStep, FlowQuestion, FlowTree, InputType, StepType, ConditionExpression } from "@/lib/flow-engine/types";
+import type { FlowStep, FlowQuestion, FlowTree, InputType, StepType } from "@/lib/flow-engine/types";
 import { useState } from "react";
 import RuleBuilder from "@/components/editor/RuleBuilder";
-import VariablePicker, { TextWithVariables } from "@/components/editor/VariablePicker";
-import DataPanel from "@/components/editor/DataPanel";
+import { TextWithVariables } from "@/components/editor/VariablePicker";
+import FlowCanvas from "@/components/editor/FlowCanvas";
 
 const INPUT_TYPES: { value: InputType; label: string }[] = [
   { value: "text", label: "Text" },
@@ -57,6 +56,7 @@ interface FlowBuilderEditorProps {
 export default function FlowBuilderEditor({ flowId, initialTree, onSave, isSaving, onPreview, onPublish, isPublishing, versionStatus }: FlowBuilderEditorProps) {
   const builder = useFlowBuilder(initialTree);
   const { flow, selectedStep, selectedStepId, setSelectedStepId } = builder;
+  const [showSettings, setShowSettings] = useState(false);
 
   const handleSave = () => {
     onSave?.(flow);
@@ -64,16 +64,23 @@ export default function FlowBuilderEditor({ flowId, initialTree, onSave, isSavin
   };
 
   return (
-    <div className="space-y-4 animate-fade-in">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-heading font-bold">{flow.flow.name}</h1>
-          <p className="text-sm text-muted-foreground">{flow.flow.description || "Ingen beskrivning"}</p>
+    <div className="h-[calc(100vh-5rem)] flex flex-col animate-fade-in">
+      {/* Compact header toolbar */}
+      <div className="flex items-center justify-between border-b bg-card px-4 py-2.5 shrink-0">
+        <div className="flex items-center gap-3 min-w-0">
+          <GitBranch className="h-5 w-5 text-primary shrink-0" />
+          <div className="min-w-0">
+            <h1 className="text-base font-heading font-bold truncate">{flow.flow.name}</h1>
+            <p className="text-xs text-muted-foreground truncate">{flow.flow.description || "Ingen beskrivning"}</p>
+          </div>
         </div>
-        <div className="flex gap-2">
-          <Button variant="outline" size="sm" onClick={() => onPreview?.(flow)}>
-            <Eye className="mr-1 h-4 w-4" /> Förhandsgranska
+        <div className="flex items-center gap-1.5">
+          <Button variant="ghost" size="sm" onClick={() => setShowSettings(!showSettings)} className="gap-1.5">
+            <Settings className="h-4 w-4" /> Inställningar
+          </Button>
+          <Separator orientation="vertical" className="h-6" />
+          <Button variant="outline" size="sm" onClick={() => onPreview?.(flow)} className="gap-1.5">
+            <Eye className="h-4 w-4" /> Förhandsgranska
           </Button>
           {onPublish && (
             <Button
@@ -85,32 +92,42 @@ export default function FlowBuilderEditor({ flowId, initialTree, onSave, isSavin
               {isPublishing ? "Publicerar..." : versionStatus === "published" ? "✓ Publicerad" : "Publicera"}
             </Button>
           )}
-          <Button size="sm" variant="outline" onClick={handleSave} disabled={!builder.isDirty || isSaving}>
-            <Save className="mr-1 h-4 w-4" /> {isSaving ? "Sparar..." : "Spara"}
+          <Button size="sm" onClick={handleSave} disabled={!builder.isDirty || isSaving} className="gap-1.5">
+            <Save className="h-4 w-4" /> {isSaving ? "Sparar..." : "Spara"}
           </Button>
         </div>
       </div>
 
-      {/* Flow settings */}
-      <Card>
-        <CardContent className="p-4">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      {/* Flow settings panel (collapsible) */}
+      {showSettings && (
+        <div className="border-b bg-muted/30 px-4 py-3 shrink-0">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-3 max-w-3xl">
             <div>
-              <Label>Namn</Label>
+              <Label className="text-xs">Namn</Label>
               <Input
                 value={flow.flow.name}
                 onChange={e => builder.updateFlow(prev => ({ ...prev, flow: { ...prev.flow, name: e.target.value } }))}
+                className="h-8 text-sm"
               />
             </div>
             <div>
-              <Label>Kategori</Label>
+              <Label className="text-xs">Beskrivning</Label>
+              <Input
+                value={flow.flow.description}
+                onChange={e => builder.updateFlow(prev => ({ ...prev, flow: { ...prev.flow, description: e.target.value } }))}
+                className="h-8 text-sm"
+              />
+            </div>
+            <div>
+              <Label className="text-xs">Kategori</Label>
               <Input
                 value={flow.flow.category}
                 onChange={e => builder.updateFlow(prev => ({ ...prev, flow: { ...prev.flow, category: e.target.value } }))}
+                className="h-8 text-sm"
               />
             </div>
             <div>
-              <Label>AI-läge</Label>
+              <Label className="text-xs">AI-läge</Label>
               <Select
                 value={flow.flow.ai_mode}
                 onValueChange={v => builder.updateFlow(prev => ({
@@ -118,7 +135,7 @@ export default function FlowBuilderEditor({ flowId, initialTree, onSave, isSavin
                   flow: { ...prev.flow, ai_mode: v as any, ai_enabled: v !== "off" },
                 }))}
               >
-                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="off">Av</SelectItem>
                   <SelectItem value="suggestions">Förslag</SelectItem>
@@ -127,73 +144,44 @@ export default function FlowBuilderEditor({ flowId, initialTree, onSave, isSavin
               </Select>
             </div>
           </div>
-        </CardContent>
-      </Card>
+        </div>
+      )}
 
-      {/* Main editor area */}
-      <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
-        {/* Step list */}
-        <div className="lg:col-span-1 space-y-2">
-          <div className="flex items-center justify-between mb-2">
-            <h2 className="font-heading font-semibold text-sm uppercase tracking-wider text-muted-foreground">Steg</h2>
-            <Button variant="outline" size="sm" onClick={() => builder.addStep()}>
-              <PlusCircle className="mr-1 h-3 w-3" /> Lägg till
-            </Button>
-          </div>
-          <ScrollArea className="h-[500px]">
-            <div className="space-y-1 pr-2">
-              {flow.steps.map((step, i) => (
-                <button
-                  key={step.id}
-                  onClick={() => setSelectedStepId(step.id)}
-                  className={`w-full text-left p-3 rounded-lg border transition-colors ${
-                    selectedStepId === step.id
-                      ? "border-primary bg-primary/5"
-                      : "border-border hover:border-primary/30 hover:bg-muted/50"
-                  }`}
-                >
-                  <div className="flex items-center gap-2">
-                    <span className="h-6 w-6 rounded-full bg-primary/10 flex items-center justify-center text-xs font-medium text-primary">
-                      {i + 1}
-                    </span>
-                    <div className="flex-1 min-w-0">
-                      <p className="font-medium text-sm truncate">{step.title}</p>
-                      <div className="flex items-center gap-1 mt-0.5">
-                        <Badge variant="outline" className="text-[10px] px-1 py-0">
-                          {STEP_TYPES.find(t => t.value === step.type)?.label}
-                        </Badge>
-                        <span className="text-[10px] text-muted-foreground">{step.questions.length} frågor</span>
-                        {step.transitions.some(t => t.condition) && (
-                          <Filter className="h-2.5 w-2.5 text-accent" />
-                        )}
-                      </div>
-                    </div>
-                    {step.transitions.length > 0 && (
-                      <ArrowRight className="h-3 w-3 text-muted-foreground shrink-0" />
-                    )}
-                  </div>
-                </button>
-              ))}
-            </div>
+      {/* Main area: Canvas + Side panel */}
+      <div className="flex-1 flex overflow-hidden">
+        {/* Canvas area */}
+        <div className="flex-1 overflow-auto bg-muted/20">
+          <ScrollArea className="h-full">
+            <FlowCanvas
+              flow={flow}
+              selectedStepId={selectedStepId}
+              onSelectStep={setSelectedStepId}
+              onAddStep={() => builder.addStep()}
+            />
           </ScrollArea>
-
-          {/* Data panel */}
-          <DataPanel flowTree={flow} currentStepId={selectedStepId ?? undefined} />
         </div>
 
-        {/* Step editor */}
-        <div className="lg:col-span-3">
-          {selectedStep ? (
-            <StepEditor step={selectedStep} builder={builder} allSteps={flow.steps} flowTree={flow} />
-          ) : (
-            <Card className="h-[500px] flex items-center justify-center">
-              <div className="text-center text-muted-foreground">
-                <GitBranch className="h-10 w-10 mx-auto mb-2 opacity-30" />
-                <p>Välj ett steg för att redigera</p>
+        {/* Step editor side panel */}
+        {selectedStep && (
+          <div className="w-[480px] border-l bg-card shrink-0 flex flex-col overflow-hidden animate-in slide-in-from-right-5 duration-200">
+            <div className="flex items-center justify-between px-4 py-3 border-b bg-muted/30">
+              <div className="flex items-center gap-2">
+                <span className="h-6 w-6 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-xs font-bold">
+                  {flow.steps.findIndex(s => s.id === selectedStepId) + 1}
+                </span>
+                <h2 className="font-heading font-semibold text-sm">Redigera steg</h2>
               </div>
-            </Card>
-          )}
-        </div>
+              <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setSelectedStepId(null)}>
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+            <ScrollArea className="flex-1">
+              <div className="p-4">
+                <StepEditor step={selectedStep} builder={builder} allSteps={flow.steps} flowTree={flow} />
+              </div>
+            </ScrollArea>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -206,156 +194,161 @@ function StepEditor({ step, builder, allSteps, flowTree }: {
   flowTree: FlowTree;
 }) {
   return (
-    <Card>
-      <CardHeader className="pb-3">
-        <div className="flex items-center justify-between">
-          <div className="flex-1 space-y-2">
-            <TextWithVariables
-              value={step.title}
-              onChange={v => builder.updateStep(step.id, { title: v })}
-              placeholder="Stegtitel (stöder {{variabler}})"
-              flowTree={flowTree}
-              currentStepId={step.id}
-            />
-            <TextWithVariables
-              value={step.description}
-              onChange={v => builder.updateStep(step.id, { description: v })}
-              placeholder="Beskrivning (stöder {{variabler}})"
-              flowTree={flowTree}
-              currentStepId={step.id}
-            />
-          </div>
-          <Button variant="ghost" size="icon" className="text-destructive ml-2" onClick={() => builder.deleteStep(step.id)}>
-            <Trash2 className="h-4 w-4" />
-          </Button>
-        </div>
-        <div className="flex gap-2 mt-2">
-          <Select value={step.type} onValueChange={v => builder.updateStep(step.id, { type: v as StepType })}>
-            <SelectTrigger className="w-32"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              {STEP_TYPES.map(t => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}
-            </SelectContent>
-          </Select>
-          <Select
-            value={String(step.ui.columns)}
-            onValueChange={v => builder.updateStep(step.id, { ui: { ...step.ui, columns: Number(v) as 1 | 2 } })}
-          >
-            <SelectTrigger className="w-28"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="1">1 kolumn</SelectItem>
-              <SelectItem value="2">2 kolumner</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-        {/* Help text with variables */}
-        <div className="mt-2">
-          <Label className="text-xs text-muted-foreground">Hjälptext (visas för användaren)</Label>
+    <div className="space-y-4">
+      {/* Step header fields */}
+      <div className="space-y-3">
+        <div>
+          <Label className="text-xs">Stegtitel</Label>
           <TextWithVariables
-            value={step.helptext || ""}
-            onChange={v => builder.updateStep(step.id, { helptext: v })}
-            placeholder="T.ex. Hej {{user.displayName}}, fyll i uppgifterna nedan..."
+            value={step.title}
+            onChange={v => builder.updateStep(step.id, { title: v })}
+            placeholder="Stegtitel (stöder {{variabler}})"
             flowTree={flowTree}
             currentStepId={step.id}
           />
         </div>
-      </CardHeader>
-
-      <CardContent>
-        <Tabs defaultValue="questions">
-          <TabsList className="w-full">
-            <TabsTrigger value="questions" className="flex-1">
-              <MessageSquare className="mr-1 h-3 w-3" />
-              Frågor ({step.questions.length})
-            </TabsTrigger>
-            <TabsTrigger value="rules" className="flex-1">
-              <Filter className="mr-1 h-3 w-3" />
-              Regler ({step.transitions.filter(t => t.condition).length})
-            </TabsTrigger>
-            <TabsTrigger value="actions" className="flex-1">
-              <Zap className="mr-1 h-3 w-3" />
-              Åtgärder ({step.pre_actions.length + step.post_actions.length})
-            </TabsTrigger>
-          </TabsList>
-
-          <TabsContent value="questions" className="mt-3">
-            <ScrollArea className="h-[400px]">
-              <div className="space-y-2 pr-2">
-                {step.questions.map((q, idx) => (
-                  <QuestionCard
-                    key={q.id}
-                    question={q}
-                    index={idx}
-                    onUpdate={updates => builder.updateQuestion(step.id, q.id, updates)}
-                    onDelete={() => builder.deleteQuestion(step.id, q.id)}
-                    onMoveUp={idx > 0 ? () => builder.moveQuestion(step.id, idx, idx - 1) : undefined}
-                    onMoveDown={idx < step.questions.length - 1 ? () => builder.moveQuestion(step.id, idx, idx + 1) : undefined}
-                    flowTree={flowTree}
-                    currentStepId={step.id}
-                  />
-                ))}
-                {step.questions.length === 0 && (
-                  <p className="text-sm text-muted-foreground text-center py-8">Inga frågor ännu</p>
-                )}
-              </div>
-            </ScrollArea>
-            <Button variant="outline" size="sm" className="w-full mt-2" onClick={() => builder.addQuestion(step.id)}>
-              <PlusCircle className="mr-1 h-3 w-3" /> Lägg till fråga
+        <div>
+          <Label className="text-xs">Beskrivning</Label>
+          <TextWithVariables
+            value={step.description}
+            onChange={v => builder.updateStep(step.id, { description: v })}
+            placeholder="Beskrivning"
+            flowTree={flowTree}
+            currentStepId={step.id}
+          />
+        </div>
+        <div className="flex gap-2">
+          <div className="flex-1">
+            <Label className="text-xs">Typ</Label>
+            <Select value={step.type} onValueChange={v => builder.updateStep(step.id, { type: v as StepType })}>
+              <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {STEP_TYPES.map(t => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="w-24">
+            <Label className="text-xs">Kolumner</Label>
+            <Select
+              value={String(step.ui.columns)}
+              onValueChange={v => builder.updateStep(step.id, { ui: { ...step.ui, columns: Number(v) as 1 | 2 } })}
+            >
+              <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="1">1</SelectItem>
+                <SelectItem value="2">2</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="flex items-end">
+            <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => builder.deleteStep(step.id)}>
+              <Trash2 className="h-4 w-4" />
             </Button>
-          </TabsContent>
+          </div>
+        </div>
+        <div>
+          <Label className="text-xs text-muted-foreground">Hjälptext</Label>
+          <TextWithVariables
+            value={step.helptext || ""}
+            onChange={v => builder.updateStep(step.id, { helptext: v })}
+            placeholder="Hej {{user.displayName}}, fyll i nedan..."
+            flowTree={flowTree}
+            currentStepId={step.id}
+          />
+        </div>
+      </div>
 
-          <TabsContent value="rules" className="mt-3">
-            <TransitionEditor
-              step={step}
-              allSteps={allSteps}
+      <Separator />
+
+      {/* Tabs */}
+      <Tabs defaultValue="questions">
+        <TabsList className="w-full">
+          <TabsTrigger value="questions" className="flex-1 gap-1">
+            <MessageSquare className="h-3 w-3" />
+            Frågor ({step.questions.length})
+          </TabsTrigger>
+          <TabsTrigger value="rules" className="flex-1 gap-1">
+            <Filter className="h-3 w-3" />
+            Regler ({step.transitions.filter(t => t.condition).length})
+          </TabsTrigger>
+          <TabsTrigger value="actions" className="flex-1 gap-1">
+            <Zap className="h-3 w-3" />
+            Åtgärder ({step.pre_actions.length + step.post_actions.length})
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="questions" className="mt-3 space-y-2">
+          {step.questions.map((q, idx) => (
+            <QuestionCard
+              key={q.id}
+              question={q}
+              index={idx}
+              onUpdate={updates => builder.updateQuestion(step.id, q.id, updates)}
+              onDelete={() => builder.deleteQuestion(step.id, q.id)}
+              onMoveUp={idx > 0 ? () => builder.moveQuestion(step.id, idx, idx - 1) : undefined}
+              onMoveDown={idx < step.questions.length - 1 ? () => builder.moveQuestion(step.id, idx, idx + 1) : undefined}
               flowTree={flowTree}
-              onAddTransition={() => builder.addTransition(step.id)}
-              onUpdateTransition={(tId, updates) => {
-                builder.updateStep(step.id, {
-                  transitions: step.transitions.map(t => t.id === tId ? { ...t, ...updates } : t),
-                });
-              }}
-              onDeleteTransition={(tId) => {
-                builder.updateStep(step.id, {
-                  transitions: step.transitions.filter(t => t.id !== tId),
-                });
-              }}
+              currentStepId={step.id}
             />
-          </TabsContent>
+          ))}
+          {step.questions.length === 0 && (
+            <p className="text-sm text-muted-foreground text-center py-6">Inga frågor ännu</p>
+          )}
+          <Button variant="outline" size="sm" className="w-full" onClick={() => builder.addQuestion(step.id)}>
+            <PlusCircle className="mr-1 h-3 w-3" /> Lägg till fråga
+          </Button>
+        </TabsContent>
 
-          <TabsContent value="actions" className="mt-3">
-            <div className="space-y-3">
-              <div>
-                <h4 className="text-xs font-medium text-muted-foreground uppercase mb-1">Vid stegöppning</h4>
-                {step.pre_actions.map(a => (
-                  <div key={a.id} className="flex items-center gap-2 p-2 border rounded-md text-sm mb-1">
-                    <Zap className="h-3 w-3 text-warning" />
-                    <span className="flex-1">{a.name}</span>
-                    <Badge variant="outline" className="text-[10px]">{a.type}</Badge>
-                  </div>
-                ))}
-                <Button variant="ghost" size="sm" className="text-xs" onClick={() => builder.addAction(step.id, "pre_step")}>
-                  <PlusCircle className="mr-1 h-3 w-3" /> Lägg till
-                </Button>
+        <TabsContent value="rules" className="mt-3">
+          <TransitionEditor
+            step={step}
+            allSteps={allSteps}
+            flowTree={flowTree}
+            onAddTransition={() => builder.addTransition(step.id)}
+            onUpdateTransition={(tId, updates) => {
+              builder.updateStep(step.id, {
+                transitions: step.transitions.map(t => t.id === tId ? { ...t, ...updates } : t),
+              });
+            }}
+            onDeleteTransition={(tId) => {
+              builder.updateStep(step.id, {
+                transitions: step.transitions.filter(t => t.id !== tId),
+              });
+            }}
+          />
+        </TabsContent>
+
+        <TabsContent value="actions" className="mt-3 space-y-3">
+          <div>
+            <h4 className="text-xs font-medium text-muted-foreground uppercase mb-1">Vid stegöppning</h4>
+            {step.pre_actions.map(a => (
+              <div key={a.id} className="flex items-center gap-2 p-2 border rounded-md text-sm mb-1">
+                <Zap className="h-3 w-3 text-warning" />
+                <span className="flex-1">{a.name}</span>
+                <Badge variant="outline" className="text-[10px]">{a.type}</Badge>
               </div>
-              <Separator />
-              <div>
-                <h4 className="text-xs font-medium text-muted-foreground uppercase mb-1">Vid "Nästa"</h4>
-                {step.post_actions.map(a => (
-                  <div key={a.id} className="flex items-center gap-2 p-2 border rounded-md text-sm mb-1">
-                    <Zap className="h-3 w-3 text-info" />
-                    <span className="flex-1">{a.name}</span>
-                    <Badge variant="outline" className="text-[10px]">{a.type}</Badge>
-                  </div>
-                ))}
-                <Button variant="ghost" size="sm" className="text-xs" onClick={() => builder.addAction(step.id, "post_step")}>
-                  <PlusCircle className="mr-1 h-3 w-3" /> Lägg till
-                </Button>
+            ))}
+            <Button variant="ghost" size="sm" className="text-xs" onClick={() => builder.addAction(step.id, "pre_step")}>
+              <PlusCircle className="mr-1 h-3 w-3" /> Lägg till
+            </Button>
+          </div>
+          <Separator />
+          <div>
+            <h4 className="text-xs font-medium text-muted-foreground uppercase mb-1">Vid "Nästa"</h4>
+            {step.post_actions.map(a => (
+              <div key={a.id} className="flex items-center gap-2 p-2 border rounded-md text-sm mb-1">
+                <Zap className="h-3 w-3 text-info" />
+                <span className="flex-1">{a.name}</span>
+                <Badge variant="outline" className="text-[10px]">{a.type}</Badge>
               </div>
-            </div>
-          </TabsContent>
-        </Tabs>
-      </CardContent>
-    </Card>
+            ))}
+            <Button variant="ghost" size="sm" className="text-xs" onClick={() => builder.addAction(step.id, "post_step")}>
+              <PlusCircle className="mr-1 h-3 w-3" /> Lägg till
+            </Button>
+          </div>
+        </TabsContent>
+      </Tabs>
+    </div>
   );
 }
 
@@ -374,13 +367,11 @@ function TransitionEditor({ step, allSteps, flowTree, onAddTransition, onUpdateT
       </p>
 
       {step.transitions.map((t, i) => (
-        <div key={t.id} className="border rounded-lg p-3 space-y-3 bg-card">
+        <div key={t.id} className="border rounded-lg p-3 space-y-3 bg-muted/30">
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Badge variant={t.is_default ? "secondary" : "outline"} className="text-[11px]">
-                {t.is_default ? "Standard" : `Regel ${i + 1}`}
-              </Badge>
-            </div>
+            <Badge variant={t.is_default ? "secondary" : "outline"} className="text-[11px]">
+              {t.is_default ? "Standard" : `Regel ${i + 1}`}
+            </Badge>
             <div className="flex items-center gap-1">
               <label className="flex items-center gap-1 text-xs">
                 <input
@@ -397,7 +388,6 @@ function TransitionEditor({ step, allSteps, flowTree, onAddTransition, onUpdateT
             </div>
           </div>
 
-          {/* Condition builder */}
           {!t.is_default && (
             <div>
               <Label className="text-xs text-muted-foreground mb-1 block">När detta villkor uppfylls:</Label>
@@ -410,7 +400,6 @@ function TransitionEditor({ step, allSteps, flowTree, onAddTransition, onUpdateT
             </div>
           )}
 
-          {/* Target step */}
           <div className="flex items-center gap-2">
             <ArrowRight className="h-3 w-3 text-primary shrink-0" />
             <span className="text-xs text-muted-foreground shrink-0">Gå till:</span>
@@ -419,7 +408,7 @@ function TransitionEditor({ step, allSteps, flowTree, onAddTransition, onUpdateT
                 <SelectValue placeholder="Välj steg..." />
               </SelectTrigger>
               <SelectContent>
-                {allSteps.filter(s => s.id !== step.id).map((s, si) => (
+                {allSteps.filter(s => s.id !== step.id).map(s => (
                   <SelectItem key={s.id} value={s.id}>
                     Steg {allSteps.indexOf(s) + 1}: {s.title}
                   </SelectItem>
@@ -494,7 +483,6 @@ function QuestionCard({ question, index, onUpdate, onDelete, onMoveUp, onMoveDow
 
       {expanded && (
         <div className="mt-3 pt-3 border-t space-y-3">
-          {/* Description with variable support */}
           <div>
             <Label className="text-xs">Beskrivning / hjälptext</Label>
             <TextWithVariables
@@ -505,8 +493,6 @@ function QuestionCard({ question, index, onUpdate, onDelete, onMoveUp, onMoveDow
               currentStepId={currentStepId}
             />
           </div>
-
-          {/* Default value */}
           <div>
             <Label className="text-xs">Standardvärde</Label>
             <TextWithVariables
@@ -517,8 +503,6 @@ function QuestionCard({ question, index, onUpdate, onDelete, onMoveUp, onMoveDow
               currentStepId={currentStepId}
             />
           </div>
-
-          {/* Mapping key */}
           <div>
             <Label className="text-xs">Mapping-nyckel (POB)</Label>
             <Input
@@ -529,7 +513,6 @@ function QuestionCard({ question, index, onUpdate, onDelete, onMoveUp, onMoveDow
             />
           </div>
 
-          {/* Visibility conditions */}
           <Collapsible>
             <CollapsibleTrigger className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground hover:text-foreground w-full">
               <Filter className="h-3 w-3" />
@@ -547,7 +530,6 @@ function QuestionCard({ question, index, onUpdate, onDelete, onMoveUp, onMoveDow
             </CollapsibleContent>
           </Collapsible>
 
-          {/* Options for select/radio/multiselect/checkbox */}
           {(question.input_type === "select" || question.input_type === "radio" || question.input_type === "multiselect" || question.input_type === "checkbox") && (
             <div className="space-y-2">
               <Label className="text-xs">Alternativ</Label>
