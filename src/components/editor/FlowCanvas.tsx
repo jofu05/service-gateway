@@ -143,6 +143,15 @@ export default function FlowCanvas({ flow, selectedStepId, onSelectStep, onAddSt
   const [dragOverStepId, setDragOverStepId] = useState<string | null>(null);
   const [draggingStepId, setDraggingStepId] = useState<string | null>(null);
 
+  const treeKey = useMemo(() => {
+    return JSON.stringify(flow.steps.map(s => ({
+      id: s.id,
+      t: s.transitions,
+      q: s.questions.length,
+      title: s.title,
+    }))) + flow.flow.start_step_id;
+  }, [flow]);
+
   const tree = useMemo(() => {
     const root = buildTree(flow);
     if (root) {
@@ -154,7 +163,7 @@ export default function FlowCanvas({ flow, selectedStepId, onSelectStep, onAddSt
       }
     }
     return root;
-  }, [flow]);
+  }, [treeKey]);
 
   const handleDragStart = useCallback((e: React.DragEvent, stepId: string) => {
     setDraggingStepId(stepId);
