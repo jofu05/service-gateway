@@ -43,7 +43,9 @@ export function getAvailableVariables(flowTree: FlowTree, upToStepId?: string): 
   ];
 
   const steps = flowTree.steps;
-  const stopIndex = upToStepId ? steps.findIndex(s => s.id === upToStepId) : steps.length;
+  // Include the current step's questions so they can be used in transition rules
+  const stopIdx = upToStepId ? steps.findIndex(s => s.id === upToStepId) : -1;
+  const stopIndex = stopIdx >= 0 ? stopIdx + 1 : steps.length;
 
   for (let i = 0; i < Math.min(stopIndex, steps.length); i++) {
     const step = steps[i];

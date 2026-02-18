@@ -1,9 +1,9 @@
-import { useMemo, useCallback } from "react";
+import { useMemo, useState, useCallback } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   PlusCircle, MessageSquare, Info, Zap, ClipboardCheck,
-  GitBranch, Filter, Plus
+  GitBranch, Filter, Plus, GripVertical
 } from "lucide-react";
 import type { FlowStep, FlowTree, StepType, TransitionRule } from "@/lib/flow-engine/types";
 
@@ -14,7 +14,6 @@ const STEP_TYPE_CONFIG: Record<StepType, { icon: typeof MessageSquare; label: st
   review: { icon: ClipboardCheck, label: "Granska", color: "text-emerald-500", bgColor: "bg-emerald-500/10" },
 };
 
-// Node dimensions
 const NODE_W = 220;
 const NODE_H = 90;
 const H_GAP = 40;
@@ -23,10 +22,10 @@ const V_GAP = 70;
 interface TreeNode {
   step: FlowStep;
   children: TreeNode[];
-  transition?: TransitionRule; // the transition that led here
+  transition?: TransitionRule;
   x: number;
   y: number;
-  width: number; // subtree width for layout
+  width: number;
 }
 
 interface FlowCanvasProps {
@@ -34,13 +33,9 @@ interface FlowCanvasProps {
   selectedStepId: string | null;
   onSelectStep: (id: string) => void;
   onAddStep: () => void;
+  onMoveStep?: (fromIndex: number, toIndex: number) => void;
 }
 
-/**
- * Build a tree from the flow steps starting from start_step_id.
- * Each step's transitions define its children.
- * We avoid cycles by tracking visited nodes.
- */
 function buildTree(flow: FlowTree): TreeNode | null {
   const stepMap = new Map(flow.steps.map(s => [s.id, s]));
   const startStep = stepMap.get(flow.flow.start_step_id);
@@ -57,7 +52,6 @@ function buildTree(flow: FlowTree): TreeNode | null {
     const children: TreeNode[] = [];
 
     if (step.transitions.length > 0) {
-      // Use explicit transitions
       for (const t of step.transitions) {
         if (t.next_step_id) {
           const child = build(t.next_step_id, t);
@@ -65,7 +59,6 @@ function buildTree(flow: FlowTree): TreeNode | null {
         }
       }
     } else {
-      // Fallback: auto-advance to next step in array
       const idx = flow.steps.findIndex(s => s.id === stepId);
       if (idx >= 0 && idx < flow.steps.length - 1) {
         const nextStep = flow.steps[idx + 1];
@@ -80,9 +73,6 @@ function buildTree(flow: FlowTree): TreeNode | null {
   return build(flow.flow.start_step_id);
 }
 
-/**
- * Compute the width of each subtree and assign x/y positions.
- */
 function layoutTree(node: TreeNode, depth: number = 0, xOffset: number = 0): number {
   node.y = depth * (NODE_H + V_GAP);
 
@@ -100,7 +90,6 @@ function layoutTree(node: TreeNode, depth: number = 0, xOffset: number = 0): num
   }
 
   node.width = Math.max(NODE_W, totalWidth);
-  // Center this node above its children
   const firstChild = node.children[0];
   const lastChild = node.children[node.children.length - 1];
   node.x = (firstChild.x + lastChild.x) / 2;
@@ -108,9 +97,6 @@ function layoutTree(node: TreeNode, depth: number = 0, xOffset: number = 0): num
   return node.width;
 }
 
-/**
- * Get a readable label for a transition condition
- */
 function getConditionLabel(t: TransitionRule, flow: FlowTree): string {
   if (t.is_default) return "Standard";
   if (!t.condition) return "→";
@@ -121,7 +107,6 @@ function getConditionLabel(t: TransitionRule, flow: FlowTree): string {
     for (const step of flow.steps) {
       const q = step.questions.find(q => q.id === qId);
       if (q) {
-        // Try to find the label for the value
         const optLabel = q.options?.find(o => o.value === c.value)?.label ?? c.value;
         if (c.type === "equals") return `${q.label} = "${optLabel}"`;
         if (c.type === "not_equals") return `${q.label} ≠ "${optLabel}"`;
@@ -137,9 +122,6 @@ function getConditionLabel(t: TransitionRule, flow: FlowTree): string {
   return c.field ? `${c.field} ${c.type} ${c.value ?? ""}` : "Villkor";
 }
 
-/**
- * Collect all nodes as flat list for rendering
- */
 function flattenTree(node: TreeNode): TreeNode[] {
   const result: TreeNode[] = [node];
   for (const child of node.children) {
@@ -148,9 +130,6 @@ function flattenTree(node: TreeNode): TreeNode[] {
   return result;
 }
 
-/**
- * Collect edges for SVG lines
- */
 function collectEdges(node: TreeNode): Array<{ from: TreeNode; to: TreeNode; transition?: TransitionRule }> {
   const edges: Array<{ from: TreeNode; to: TreeNode; transition?: TransitionRule }> = [];
   for (const child of node.children) {
@@ -160,12 +139,14 @@ function collectEdges(node: TreeNode): Array<{ from: TreeNode; to: TreeNode; tra
   return edges;
 }
 
-export default function FlowCanvas({ flow, selectedStepId, onSelectStep, onAddStep }: FlowCanvasProps) {
+export default function FlowCanvas({ flow, selectedStepId, onSelectStep, onAddStep, onMoveStep }: FlowCanvasProps) {
+  const [dragOverStepId, setDragOverStepId] = useState<string | null>(null);
+  const [draggingStepId, setDraggingStepId] = useState<string | null>(null);
+
   const tree = useMemo(() => {
     const root = buildTree(flow);
     if (root) {
-      const totalWidth = layoutTree(root);
-      // Shift everything so x values are positive
+      layoutTree(root);
       const allNodes = flattenTree(root);
       const minX = Math.min(...allNodes.map(n => n.x));
       if (minX < 0) {
@@ -174,6 +155,43 @@ export default function FlowCanvas({ flow, selectedStepId, onSelectStep, onAddSt
     }
     return root;
   }, [flow]);
+
+  const handleDragStart = useCallback((e: React.DragEvent, stepId: string) => {
+    setDraggingStepId(stepId);
+    e.dataTransfer.effectAllowed = "move";
+    e.dataTransfer.setData("text/plain", stepId);
+  }, []);
+
+  const handleDragOver = useCallback((e: React.DragEvent, stepId: string) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+    if (stepId !== draggingStepId) {
+      setDragOverStepId(stepId);
+    }
+  }, [draggingStepId]);
+
+  const handleDragLeave = useCallback(() => {
+    setDragOverStepId(null);
+  }, []);
+
+  const handleDrop = useCallback((e: React.DragEvent, targetStepId: string) => {
+    e.preventDefault();
+    setDragOverStepId(null);
+    setDraggingStepId(null);
+    const sourceStepId = e.dataTransfer.getData("text/plain");
+    if (!sourceStepId || sourceStepId === targetStepId || !onMoveStep) return;
+
+    const fromIndex = flow.steps.findIndex(s => s.id === sourceStepId);
+    const toIndex = flow.steps.findIndex(s => s.id === targetStepId);
+    if (fromIndex >= 0 && toIndex >= 0) {
+      onMoveStep(fromIndex, toIndex);
+    }
+  }, [flow.steps, onMoveStep, draggingStepId]);
+
+  const handleDragEnd = useCallback(() => {
+    setDraggingStepId(null);
+    setDragOverStepId(null);
+  }, []);
 
   if (!tree) {
     return (
@@ -196,7 +214,7 @@ export default function FlowCanvas({ flow, selectedStepId, onSelectStep, onAddSt
   return (
     <div className="relative overflow-auto min-h-[500px]">
       <div style={{ width: canvasWidth, height: canvasHeight, position: "relative" }}>
-        {/* SVG layer for edges */}
+        {/* SVG edges */}
         <svg
           width={canvasWidth}
           height={canvasHeight}
@@ -215,7 +233,6 @@ export default function FlowCanvas({ flow, selectedStepId, onSelectStep, onAddSt
 
             return (
               <g key={i}>
-                {/* Connector line */}
                 <path
                   d={`M ${x1} ${y1} C ${x1} ${midY}, ${x2} ${midY}, ${x2} ${y2}`}
                   fill="none"
@@ -224,12 +241,10 @@ export default function FlowCanvas({ flow, selectedStepId, onSelectStep, onAddSt
                   strokeDasharray={isDefault ? "6 3" : "none"}
                   className="transition-colors"
                 />
-                {/* Arrow head */}
                 <polygon
                   points={`${x2 - 5},${y2 - 8} ${x2 + 5},${y2 - 8} ${x2},${y2}`}
                   fill={hasCondition ? "hsl(var(--primary))" : "hsl(var(--border))"}
                 />
-                {/* Condition label on edge */}
                 {edge.transition && (hasCondition || isDefault) && (
                   <foreignObject
                     x={Math.min(x1, x2) - 10}
@@ -279,17 +294,27 @@ export default function FlowCanvas({ flow, selectedStepId, onSelectStep, onAddSt
           const hasConditions = step.transitions.some(t => t.condition);
           const hasActions = step.pre_actions.length + step.post_actions.length > 0;
           const isBranching = step.transitions.filter(t => t.next_step_id).length > 1;
+          const isDragOver = dragOverStepId === step.id;
+          const isDragging = draggingStepId === step.id;
 
           return (
-            <button
+            <div
               key={step.id}
+              draggable
+              onDragStart={(e) => handleDragStart(e, step.id)}
+              onDragOver={(e) => handleDragOver(e, step.id)}
+              onDragLeave={handleDragLeave}
+              onDrop={(e) => handleDrop(e, step.id)}
+              onDragEnd={handleDragEnd}
               onClick={() => onSelectStep(step.id)}
               className={`
-                absolute transition-all duration-200 rounded-xl border-2 p-3 text-left
-                hover:shadow-lg hover:-translate-y-0.5
-                ${isSelected
-                  ? "border-primary shadow-lg shadow-primary/10 bg-card ring-2 ring-primary/20 z-10"
-                  : "border-border bg-card hover:border-primary/40 z-[1]"
+                absolute transition-all duration-200 rounded-xl border-2 p-3 text-left cursor-grab active:cursor-grabbing
+                ${isDragging ? "opacity-40 scale-95" : ""}
+                ${isDragOver
+                  ? "border-primary border-dashed bg-primary/5 ring-2 ring-primary/30 shadow-xl z-20"
+                  : isSelected
+                    ? "border-primary shadow-lg shadow-primary/10 bg-card ring-2 ring-primary/20 z-10"
+                    : "border-border bg-card hover:border-primary/40 hover:shadow-lg hover:-translate-y-0.5 z-[1]"
                 }
               `}
               style={{
@@ -299,6 +324,11 @@ export default function FlowCanvas({ flow, selectedStepId, onSelectStep, onAddSt
                 minHeight: NODE_H,
               }}
             >
+              {/* Drag handle */}
+              <div className="absolute -left-0.5 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 hover:opacity-100 transition-opacity">
+                <GripVertical className="h-4 w-4 text-muted-foreground/50" />
+              </div>
+
               {/* Step number */}
               <div className="absolute -top-2.5 -left-2">
                 <div className={`
@@ -328,16 +358,28 @@ export default function FlowCanvas({ flow, selectedStepId, onSelectStep, onAddSt
                   {step.description && (
                     <p className="text-[10px] text-muted-foreground mt-0.5 truncate">{step.description}</p>
                   )}
+                  {/* Show questions summary */}
+                  {step.questions.length > 0 && (
+                    <div className="mt-1 space-y-0.5">
+                      {step.questions.slice(0, 3).map(q => (
+                        <div key={q.id} className="text-[9px] text-muted-foreground truncate flex items-center gap-1">
+                          <span className="text-foreground/60">•</span>
+                          <span className="truncate">{q.label}</span>
+                          {q.options && q.options.length > 0 && (
+                            <span className="text-primary/60 shrink-0">({q.options.length} val)</span>
+                          )}
+                        </div>
+                      ))}
+                      {step.questions.length > 3 && (
+                        <span className="text-[9px] text-muted-foreground/60">+{step.questions.length - 3} till</span>
+                      )}
+                    </div>
+                  )}
                   <div className="flex items-center gap-1 mt-1.5 flex-wrap">
                     <Badge variant="outline" className="text-[9px] h-4 gap-0.5 px-1">
                       <Icon className="h-2 w-2" />
                       {config.label}
                     </Badge>
-                    {step.questions.length > 0 && (
-                      <Badge variant="secondary" className="text-[9px] h-4 px-1">
-                        {step.questions.length} {step.questions.length === 1 ? "fråga" : "frågor"}
-                      </Badge>
-                    )}
                     {hasConditions && (
                       <Badge variant="outline" className="text-[9px] h-4 gap-0.5 px-1 border-primary/50 text-primary">
                         <Filter className="h-2 w-2" />
@@ -351,11 +393,11 @@ export default function FlowCanvas({ flow, selectedStepId, onSelectStep, onAddSt
                   </div>
                 </div>
               </div>
-            </button>
+            </div>
           );
         })}
 
-        {/* Add step button at bottom of each leaf */}
+        {/* Add step button at leaves */}
         {allNodes.filter(n => n.children.length === 0).map((leaf) => (
           <div
             key={`add-${leaf.step.id}`}
@@ -371,12 +413,12 @@ export default function FlowCanvas({ flow, selectedStepId, onSelectStep, onAddSt
               className="h-7 w-7 rounded-full border-2 border-dashed border-muted-foreground/30 hover:border-primary hover:bg-primary/5 flex items-center justify-center transition-all"
               title="Lägg till steg"
             >
-              <Plus className="h-3.5 w-3.5 text-muted-foreground hover:text-primary" />
+              <Plus className="h-3.5 w-3.5 text-muted-foreground" />
             </button>
           </div>
         ))}
 
-        {/* End indicators for leaves without further transitions */}
+        {/* End indicators */}
         {allNodes
           .filter(n => n.children.length === 0)
           .map((leaf) => (
