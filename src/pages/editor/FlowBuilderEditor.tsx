@@ -12,14 +12,15 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import {
   PlusCircle, Trash2, ArrowRight, Settings2,
   Eye, Save, ChevronRight, ChevronDown, Zap, GitBranch,
-  Filter, MessageSquare, X, Settings
+  Filter, MessageSquare, X, Settings, Search
 } from "lucide-react";
 import { toast } from "sonner";
-import type { FlowStep, FlowQuestion, FlowTree, InputType, StepType } from "@/lib/flow-engine/types";
-import { useState } from "react";
+import type { FlowStep, FlowQuestion, FlowTree, FlowAction, InputType, StepType } from "@/lib/flow-engine/types";
+import { useState, useEffect } from "react";
 import RuleBuilder from "@/components/editor/RuleBuilder";
 import { TextWithVariables } from "@/components/editor/VariablePicker";
 import FlowCanvas from "@/components/editor/FlowCanvas";
+import { type ActionTemplate, ACTION_TYPES, getActionTemplates, subscribeActionTemplates } from "@/lib/action-templates";
 
 const INPUT_TYPES: { value: InputType; label: string }[] = [
   { value: "text", label: "Text" },
@@ -320,35 +321,186 @@ function StepEditor({ step, builder, allSteps, flowTree }: {
         </TabsContent>
 
         <TabsContent value="actions" className="mt-3 space-y-3">
-          <div>
-            <h4 className="text-xs font-medium text-muted-foreground uppercase mb-1">Vid stegöppning</h4>
-            {step.pre_actions.map(a => (
-              <div key={a.id} className="flex items-center gap-2 p-2 border rounded-md text-sm mb-1">
-                <Zap className="h-3 w-3 text-warning" />
-                <span className="flex-1">{a.name}</span>
-                <Badge variant="outline" className="text-[10px]">{a.type}</Badge>
-              </div>
-            ))}
-            <Button variant="ghost" size="sm" className="text-xs" onClick={() => builder.addAction(step.id, "pre_step")}>
-              <PlusCircle className="mr-1 h-3 w-3" /> Lägg till
-            </Button>
-          </div>
-          <Separator />
-          <div>
-            <h4 className="text-xs font-medium text-muted-foreground uppercase mb-1">Vid "Nästa"</h4>
-            {step.post_actions.map(a => (
-              <div key={a.id} className="flex items-center gap-2 p-2 border rounded-md text-sm mb-1">
-                <Zap className="h-3 w-3 text-info" />
-                <span className="flex-1">{a.name}</span>
-                <Badge variant="outline" className="text-[10px]">{a.type}</Badge>
-              </div>
-            ))}
-            <Button variant="ghost" size="sm" className="text-xs" onClick={() => builder.addAction(step.id, "post_step")}>
-              <PlusCircle className="mr-1 h-3 w-3" /> Lägg till
-            </Button>
-          </div>
+          <StepActionsEditor step={step} builder={builder} />
         </TabsContent>
       </Tabs>
+    </div>
+  );
+}
+
+function StepActionsEditor({ step, builder }: {
+  step: FlowStep;
+  builder: ReturnType<typeof useFlowBuilder>;
+}) {
+  const [templates, setTemplates] = useState<ActionTemplate[]>(getActionTemplates());
+  const [pickerOpen, setPickerOpen] = useState<"pre" | "post" | null>(null);
+  const [searchTerm, setSearchTerm] = useState("");
+
+  useEffect(() => {
+    const unsub = subscribeActionTemplates(() => setTemplates(getActionTemplates()));
+    return unsub;
+  }, []);
+
+  const globalTemplates = templates.filter(t => t.global);
+  const filteredTemplates = globalTemplates.filter(t =>
+    t.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    t.description.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
+  function addFromTemplate(template: ActionTemplate, trigger: "pre_step" | "post_step") {
+    const action: FlowAction = {
+      id: `act-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      name: template.name,
+      type: template.type,
+      trigger,
+      trigger_question_id: template.trigger_question_id,
+      input_template: { ...template.input_template },
+      output_mapping: { ...template.output_mapping },
+      error_handling: { ...template.error_handling },
+    };
+    if (trigger === "pre_step") {
+      builder.updateStep(step.id, { pre_actions: [...step.pre_actions, action] });
+    } else {
+      builder.updateStep(step.id, { post_actions: [...step.post_actions, action] });
+    }
+    setPickerOpen(null);
+    setSearchTerm("");
+    toast.success(`"${template.name}" tillagd`);
+  }
+
+  function removeAction(actionId: string, phase: "pre" | "post") {
+    if (phase === "pre") {
+      builder.updateStep(step.id, { pre_actions: step.pre_actions.filter(a => a.id !== actionId) });
+    } else {
+      builder.updateStep(step.id, { post_actions: step.post_actions.filter(a => a.id !== actionId) });
+    }
+  }
+
+  const typeColors: Record<string, string> = {
+    lookup: "text-info",
+    automation: "text-primary",
+    validation: "text-warning",
+    enrichment: "text-accent",
+    notification: "text-success",
+  };
+
+  return (
+    <div className="space-y-3">
+      {/* Pre-step actions */}
+      <div>
+        <h4 className="text-xs font-medium text-muted-foreground uppercase mb-1.5">Vid stegöppning (pre)</h4>
+        {step.pre_actions.map(a => (
+          <div key={a.id} className="flex items-center gap-2 p-2 border rounded-md text-sm mb-1 group">
+            <Zap className={`h-3 w-3 ${typeColors[a.type] || "text-warning"}`} />
+            <span className="flex-1 truncate">{a.name}</span>
+            <Badge variant="outline" className="text-[10px]">
+              {ACTION_TYPES.find(t => t.value === a.type)?.label || a.type}
+            </Badge>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-6 w-6 opacity-0 group-hover:opacity-100 text-destructive/60 hover:text-destructive"
+              onClick={() => removeAction(a.id, "pre")}
+            >
+              <Trash2 className="h-3 w-3" />
+            </Button>
+          </div>
+        ))}
+        {step.pre_actions.length === 0 && (
+          <p className="text-xs text-muted-foreground italic mb-1">Inga åtgärder</p>
+        )}
+        <Button variant="ghost" size="sm" className="text-xs" onClick={() => { setPickerOpen("pre"); setSearchTerm(""); }}>
+          <PlusCircle className="mr-1 h-3 w-3" /> Lägg till från bibliotek
+        </Button>
+      </div>
+
+      <Separator />
+
+      {/* Post-step actions */}
+      <div>
+        <h4 className="text-xs font-medium text-muted-foreground uppercase mb-1.5">Vid "Nästa" (post)</h4>
+        {step.post_actions.map(a => (
+          <div key={a.id} className="flex items-center gap-2 p-2 border rounded-md text-sm mb-1 group">
+            <Zap className={`h-3 w-3 ${typeColors[a.type] || "text-info"}`} />
+            <span className="flex-1 truncate">{a.name}</span>
+            <Badge variant="outline" className="text-[10px]">
+              {ACTION_TYPES.find(t => t.value === a.type)?.label || a.type}
+            </Badge>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-6 w-6 opacity-0 group-hover:opacity-100 text-destructive/60 hover:text-destructive"
+              onClick={() => removeAction(a.id, "post")}
+            >
+              <Trash2 className="h-3 w-3" />
+            </Button>
+          </div>
+        ))}
+        {step.post_actions.length === 0 && (
+          <p className="text-xs text-muted-foreground italic mb-1">Inga åtgärder</p>
+        )}
+        <Button variant="ghost" size="sm" className="text-xs" onClick={() => { setPickerOpen("post"); setSearchTerm(""); }}>
+          <PlusCircle className="mr-1 h-3 w-3" /> Lägg till från bibliotek
+        </Button>
+      </div>
+
+      {/* Also allow creating a custom inline action */}
+      <Separator />
+      <div className="flex gap-2">
+        <Button variant="outline" size="sm" className="flex-1 text-xs" onClick={() => builder.addAction(step.id, "pre_step")}>
+          <PlusCircle className="mr-1 h-3 w-3" /> Egen pre-åtgärd
+        </Button>
+        <Button variant="outline" size="sm" className="flex-1 text-xs" onClick={() => builder.addAction(step.id, "post_step")}>
+          <PlusCircle className="mr-1 h-3 w-3" /> Egen post-åtgärd
+        </Button>
+      </div>
+
+      {/* Template picker dialog */}
+      {pickerOpen && (
+        <div className="border rounded-lg bg-card shadow-lg p-3 space-y-2 animate-in fade-in-0 zoom-in-95 duration-150">
+          <div className="flex items-center justify-between">
+            <h4 className="text-sm font-heading font-semibold">Välj åtgärd</h4>
+            <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setPickerOpen(null)}>
+              <X className="h-3.5 w-3.5" />
+            </Button>
+          </div>
+          <div className="relative">
+            <Search className="absolute left-2 top-2 h-3.5 w-3.5 text-muted-foreground" />
+            <Input
+              placeholder="Sök åtgärder..."
+              value={searchTerm}
+              onChange={e => setSearchTerm(e.target.value)}
+              className="h-8 text-xs pl-7"
+              autoFocus
+            />
+          </div>
+          <ScrollArea className="max-h-[200px]">
+            <div className="space-y-1">
+              {filteredTemplates.length === 0 && (
+                <p className="text-xs text-muted-foreground text-center py-3">
+                  Inga globala åtgärder. Skapa dem under Administration → Åtgärder.
+                </p>
+              )}
+              {filteredTemplates.map(t => (
+                <button
+                  key={t.id}
+                  className="w-full text-left p-2 rounded-md hover:bg-muted/60 transition-colors flex items-center gap-2"
+                  onClick={() => addFromTemplate(t, pickerOpen === "pre" ? "pre_step" : "post_step")}
+                >
+                  <Zap className={`h-3.5 w-3.5 shrink-0 ${typeColors[t.type] || "text-muted-foreground"}`} />
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs font-medium truncate">{t.name}</p>
+                    <p className="text-[11px] text-muted-foreground truncate">{t.description}</p>
+                  </div>
+                  <Badge variant="outline" className="text-[10px] shrink-0">
+                    {ACTION_TYPES.find(at => at.value === t.type)?.label}
+                  </Badge>
+                </button>
+              ))}
+            </div>
+          </ScrollArea>
+        </div>
+      )}
     </div>
   );
 }
