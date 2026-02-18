@@ -130,11 +130,20 @@ export function useFlowBuilder(initial?: FlowTree) {
     }));
   }, [updateFlow]);
 
+  const moveStep = useCallback((fromIndex: number, toIndex: number) => {
+    updateFlow(prev => {
+      const steps = [...prev.steps];
+      const [moved] = steps.splice(fromIndex, 1);
+      steps.splice(toIndex, 0, moved);
+      return { ...prev, steps };
+    });
+  }, [updateFlow]);
+
   return {
     flow, setFlow, selectedStepId, setSelectedStepId, selectedStep,
     isDirty, setIsDirty,
     addStep, updateStep, deleteStep,
-    addQuestion, updateQuestion, deleteQuestion, moveQuestion,
+    addQuestion, updateQuestion, deleteQuestion, moveQuestion, moveStep,
     addTransition, addAction, updateFlow,
   };
 }

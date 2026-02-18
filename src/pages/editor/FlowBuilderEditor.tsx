@@ -157,6 +157,7 @@ export default function FlowBuilderEditor({ flowId, initialTree, onSave, isSavin
               selectedStepId={selectedStepId}
               onSelectStep={setSelectedStepId}
               onAddStep={() => builder.addStep()}
+              onMoveStep={(from, to) => builder.moveStep(from, to)}
             />
           </ScrollArea>
         </div>
