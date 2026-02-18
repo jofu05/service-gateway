@@ -20,7 +20,7 @@ import { useState, useEffect } from "react";
 import RuleBuilder from "@/components/editor/RuleBuilder";
 import { TextWithVariables } from "@/components/editor/VariablePicker";
 import FlowCanvas from "@/components/editor/FlowCanvas";
-import { type ActionTemplate, ACTION_TYPES, getActionTemplates, subscribeActionTemplates } from "@/lib/action-templates";
+import { type ActionTemplate, ACTION_TYPES, getActionTemplates, subscribeActionTemplates, fetchActionTemplates } from "@/lib/action-templates";
 
 const INPUT_TYPES: { value: InputType; label: string }[] = [
   { value: "text", label: "Text" },
@@ -337,6 +337,7 @@ function StepActionsEditor({ step, builder }: {
   const [searchTerm, setSearchTerm] = useState("");
 
   useEffect(() => {
+    fetchActionTemplates();
     const unsub = subscribeActionTemplates(() => setTemplates(getActionTemplates()));
     return unsub;
   }, []);

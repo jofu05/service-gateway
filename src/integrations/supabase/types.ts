@@ -14,6 +14,51 @@ export type Database = {
   }
   public: {
     Tables: {
+      action_templates: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          description: string | null
+          endpoint: string | null
+          error_config: Json | null
+          id: string
+          input_template: Json | null
+          method: string
+          name: string
+          output_mapping: Json | null
+          type: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          endpoint?: string | null
+          error_config?: Json | null
+          id?: string
+          input_template?: Json | null
+          method?: string
+          name: string
+          output_mapping?: Json | null
+          type?: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          endpoint?: string | null
+          error_config?: Json | null
+          id?: string
+          input_template?: Json | null
+          method?: string
+          name?: string
+          output_mapping?: Json | null
+          type?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       ai_logs: {
         Row: {
           accepted: boolean | null
