@@ -1,18 +1,33 @@
-import { useRef, useMemo } from "react";
+import { useMemo, useCallback } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   PlusCircle, MessageSquare, Info, Zap, ClipboardCheck,
-  ArrowDown, Filter, GitBranch
+  GitBranch, Filter, Plus
 } from "lucide-react";
-import type { FlowStep, FlowTree, StepType } from "@/lib/flow-engine/types";
+import type { FlowStep, FlowTree, StepType, TransitionRule } from "@/lib/flow-engine/types";
 
 const STEP_TYPE_CONFIG: Record<StepType, { icon: typeof MessageSquare; label: string; color: string; bgColor: string }> = {
   questions: { icon: MessageSquare, label: "Frågor", color: "text-primary", bgColor: "bg-primary/10" },
-  info: { icon: Info, label: "Information", color: "text-info", bgColor: "bg-info/10" },
-  action: { icon: Zap, label: "Åtgärd", color: "text-warning", bgColor: "bg-warning/10" },
-  review: { icon: ClipboardCheck, label: "Granska", color: "text-accent", bgColor: "bg-accent/10" },
+  info: { icon: Info, label: "Information", color: "text-blue-500", bgColor: "bg-blue-500/10" },
+  action: { icon: Zap, label: "Åtgärd", color: "text-amber-500", bgColor: "bg-amber-500/10" },
+  review: { icon: ClipboardCheck, label: "Granska", color: "text-emerald-500", bgColor: "bg-emerald-500/10" },
 };
+
+// Node dimensions
+const NODE_W = 220;
+const NODE_H = 90;
+const H_GAP = 40;
+const V_GAP = 70;
+
+interface TreeNode {
+  step: FlowStep;
+  children: TreeNode[];
+  transition?: TransitionRule; // the transition that led here
+  x: number;
+  y: number;
+  width: number; // subtree width for layout
+}
 
 interface FlowCanvasProps {
   flow: FlowTree;
@@ -21,172 +36,364 @@ interface FlowCanvasProps {
   onAddStep: () => void;
 }
 
-export default function FlowCanvas({ flow, selectedStepId, onSelectStep, onAddStep }: FlowCanvasProps) {
-  const steps = flow.steps;
+/**
+ * Build a tree from the flow steps starting from start_step_id.
+ * Each step's transitions define its children.
+ * We avoid cycles by tracking visited nodes.
+ */
+function buildTree(flow: FlowTree): TreeNode | null {
+  const stepMap = new Map(flow.steps.map(s => [s.id, s]));
+  const startStep = stepMap.get(flow.flow.start_step_id);
+  if (!startStep) return null;
 
-  // Build transition map for arrows
-  const transitionMap = useMemo(() => {
-    const map: Array<{ fromIndex: number; toIndex: number; hasCondition: boolean }> = [];
-    steps.forEach((step, fromIdx) => {
-      step.transitions.forEach(t => {
-        const toIdx = steps.findIndex(s => s.id === t.next_step_id);
-        if (toIdx >= 0) {
-          map.push({ fromIndex: fromIdx, toIndex: toIdx, hasCondition: !!t.condition });
+  const visited = new Set<string>();
+
+  function build(stepId: string, transition?: TransitionRule): TreeNode | null {
+    if (visited.has(stepId)) return null;
+    const step = stepMap.get(stepId);
+    if (!step) return null;
+    visited.add(stepId);
+
+    const children: TreeNode[] = [];
+
+    if (step.transitions.length > 0) {
+      // Use explicit transitions
+      for (const t of step.transitions) {
+        if (t.next_step_id) {
+          const child = build(t.next_step_id, t);
+          if (child) children.push(child);
         }
-      });
-    });
-    return map;
-  }, [steps]);
+      }
+    } else {
+      // Fallback: auto-advance to next step in array
+      const idx = flow.steps.findIndex(s => s.id === stepId);
+      if (idx >= 0 && idx < flow.steps.length - 1) {
+        const nextStep = flow.steps[idx + 1];
+        const child = build(nextStep.id, undefined);
+        if (child) children.push(child);
+      }
+    }
+
+    return { step, children, transition, x: 0, y: 0, width: 0 };
+  }
+
+  return build(flow.flow.start_step_id);
+}
+
+/**
+ * Compute the width of each subtree and assign x/y positions.
+ */
+function layoutTree(node: TreeNode, depth: number = 0, xOffset: number = 0): number {
+  node.y = depth * (NODE_H + V_GAP);
+
+  if (node.children.length === 0) {
+    node.width = NODE_W;
+    node.x = xOffset;
+    return NODE_W;
+  }
+
+  let totalWidth = 0;
+  for (let i = 0; i < node.children.length; i++) {
+    const childWidth = layoutTree(node.children[i], depth + 1, xOffset + totalWidth);
+    totalWidth += childWidth;
+    if (i < node.children.length - 1) totalWidth += H_GAP;
+  }
+
+  node.width = Math.max(NODE_W, totalWidth);
+  // Center this node above its children
+  const firstChild = node.children[0];
+  const lastChild = node.children[node.children.length - 1];
+  node.x = (firstChild.x + lastChild.x) / 2;
+
+  return node.width;
+}
+
+/**
+ * Get a readable label for a transition condition
+ */
+function getConditionLabel(t: TransitionRule, flow: FlowTree): string {
+  if (t.is_default) return "Standard";
+  if (!t.condition) return "→";
+
+  const c = t.condition;
+  if (c.field?.startsWith("answers.")) {
+    const qId = c.field.replace("answers.", "");
+    for (const step of flow.steps) {
+      const q = step.questions.find(q => q.id === qId);
+      if (q) {
+        // Try to find the label for the value
+        const optLabel = q.options?.find(o => o.value === c.value)?.label ?? c.value;
+        if (c.type === "equals") return `${q.label} = "${optLabel}"`;
+        if (c.type === "not_equals") return `${q.label} ≠ "${optLabel}"`;
+        if (c.type === "contains") return `${q.label} ∋ "${optLabel}"`;
+        return `${q.label} ${c.type} ${optLabel}`;
+      }
+    }
+  }
+
+  if (c.type === "has_role") return `Roll: ${c.value}`;
+  if (c.type === "in_group") return `Grupp: ${c.value}`;
+
+  return c.field ? `${c.field} ${c.type} ${c.value ?? ""}` : "Villkor";
+}
+
+/**
+ * Collect all nodes as flat list for rendering
+ */
+function flattenTree(node: TreeNode): TreeNode[] {
+  const result: TreeNode[] = [node];
+  for (const child of node.children) {
+    result.push(...flattenTree(child));
+  }
+  return result;
+}
+
+/**
+ * Collect edges for SVG lines
+ */
+function collectEdges(node: TreeNode): Array<{ from: TreeNode; to: TreeNode; transition?: TransitionRule }> {
+  const edges: Array<{ from: TreeNode; to: TreeNode; transition?: TransitionRule }> = [];
+  for (const child of node.children) {
+    edges.push({ from: node, to: child, transition: child.transition });
+    edges.push(...collectEdges(child));
+  }
+  return edges;
+}
+
+export default function FlowCanvas({ flow, selectedStepId, onSelectStep, onAddStep }: FlowCanvasProps) {
+  const tree = useMemo(() => {
+    const root = buildTree(flow);
+    if (root) {
+      const totalWidth = layoutTree(root);
+      // Shift everything so x values are positive
+      const allNodes = flattenTree(root);
+      const minX = Math.min(...allNodes.map(n => n.x));
+      if (minX < 0) {
+        for (const n of allNodes) n.x -= minX;
+      }
+    }
+    return root;
+  }, [flow]);
+
+  if (!tree) {
+    return (
+      <div className="flex flex-col items-center justify-center h-96 gap-4">
+        <p className="text-muted-foreground">Inga steg i flödet ännu.</p>
+        <Button variant="outline" onClick={onAddStep}>
+          <PlusCircle className="mr-2 h-4 w-4" /> Lägg till första steget
+        </Button>
+      </div>
+    );
+  }
+
+  const allNodes = flattenTree(tree);
+  const edges = collectEdges(tree);
+
+  const PADDING = 60;
+  const canvasWidth = Math.max(...allNodes.map(n => n.x + NODE_W)) + PADDING * 2;
+  const canvasHeight = Math.max(...allNodes.map(n => n.y + NODE_H)) + PADDING + 80;
 
   return (
-    <div className="relative flex flex-col items-center py-6 px-4 min-h-[500px]">
-      {/* Start indicator */}
-      <div className="flex items-center gap-2 mb-3">
-        <div className="h-8 w-8 rounded-full bg-accent flex items-center justify-center shadow-md">
-          <GitBranch className="h-4 w-4 text-accent-foreground" />
+    <div className="relative overflow-auto min-h-[500px]">
+      <div style={{ width: canvasWidth, height: canvasHeight, position: "relative" }}>
+        {/* SVG layer for edges */}
+        <svg
+          width={canvasWidth}
+          height={canvasHeight}
+          className="absolute inset-0 pointer-events-none"
+          style={{ zIndex: 0 }}
+        >
+          {edges.map((edge, i) => {
+            const x1 = edge.from.x + PADDING + NODE_W / 2;
+            const y1 = edge.from.y + PADDING + NODE_H;
+            const x2 = edge.to.x + PADDING + NODE_W / 2;
+            const y2 = edge.to.y + PADDING;
+            const midY = (y1 + y2) / 2;
+
+            const hasCondition = edge.transition?.condition != null;
+            const isDefault = edge.transition?.is_default;
+
+            return (
+              <g key={i}>
+                {/* Connector line */}
+                <path
+                  d={`M ${x1} ${y1} C ${x1} ${midY}, ${x2} ${midY}, ${x2} ${y2}`}
+                  fill="none"
+                  stroke={hasCondition ? "hsl(var(--primary))" : "hsl(var(--border))"}
+                  strokeWidth={hasCondition ? 2.5 : 2}
+                  strokeDasharray={isDefault ? "6 3" : "none"}
+                  className="transition-colors"
+                />
+                {/* Arrow head */}
+                <polygon
+                  points={`${x2 - 5},${y2 - 8} ${x2 + 5},${y2 - 8} ${x2},${y2}`}
+                  fill={hasCondition ? "hsl(var(--primary))" : "hsl(var(--border))"}
+                />
+                {/* Condition label on edge */}
+                {edge.transition && (hasCondition || isDefault) && (
+                  <foreignObject
+                    x={Math.min(x1, x2) - 10}
+                    y={midY - 12}
+                    width={Math.abs(x2 - x1) + 20}
+                    height={24}
+                  >
+                    <div className="flex justify-center">
+                      <span className={`
+                        text-[10px] px-2 py-0.5 rounded-full whitespace-nowrap
+                        ${hasCondition
+                          ? "bg-primary/10 text-primary border border-primary/20"
+                          : "bg-muted text-muted-foreground border border-border"
+                        }
+                      `}>
+                        {getConditionLabel(edge.transition, flow)}
+                      </span>
+                    </div>
+                  </foreignObject>
+                )}
+              </g>
+            );
+          })}
+        </svg>
+
+        {/* Start indicator */}
+        <div
+          className="absolute flex items-center gap-2"
+          style={{
+            left: tree.x + PADDING + NODE_W / 2 - 40,
+            top: PADDING - 40,
+          }}
+        >
+          <div className="h-7 w-7 rounded-full bg-accent flex items-center justify-center shadow-md">
+            <GitBranch className="h-3.5 w-3.5 text-accent-foreground" />
+          </div>
+          <span className="text-xs font-semibold uppercase tracking-wider text-accent">Start</span>
         </div>
-        <span className="text-xs font-semibold uppercase tracking-wider text-accent">Start</span>
-      </div>
 
-      {steps.map((step, i) => {
-        const config = STEP_TYPE_CONFIG[step.type];
-        const Icon = config.icon;
-        const isSelected = step.id === selectedStepId;
-        const hasConditions = step.transitions.some(t => t.condition);
-        const hasActions = step.pre_actions.length + step.post_actions.length > 0;
-        const isStart = flow.flow.start_step_id === step.id;
+        {/* Step nodes */}
+        {allNodes.map((node) => {
+          const { step } = node;
+          const config = STEP_TYPE_CONFIG[step.type];
+          const Icon = config.icon;
+          const isSelected = step.id === selectedStepId;
+          const stepIndex = flow.steps.findIndex(s => s.id === step.id);
+          const hasConditions = step.transitions.some(t => t.condition);
+          const hasActions = step.pre_actions.length + step.post_actions.length > 0;
+          const isBranching = step.transitions.filter(t => t.next_step_id).length > 1;
 
-        // Check for non-sequential transitions (branches)
-        const branches = step.transitions.filter(t => {
-          const targetIdx = steps.findIndex(s => s.id === t.next_step_id);
-          return targetIdx >= 0 && targetIdx !== i + 1;
-        });
-
-        return (
-          <div key={step.id} className="flex flex-col items-center w-full max-w-md">
-            {/* Connector arrow from previous */}
-            {i > 0 && (
-              <div className="flex flex-col items-center my-1">
-                <div className="w-0.5 h-4 bg-border" />
-                <ArrowDown className="h-3.5 w-3.5 text-muted-foreground -mt-1" />
-              </div>
-            )}
-
-            {/* Step node */}
+          return (
             <button
+              key={step.id}
               onClick={() => onSelectStep(step.id)}
               className={`
-                w-full relative group transition-all duration-200 rounded-xl border-2 p-4 text-left
+                absolute transition-all duration-200 rounded-xl border-2 p-3 text-left
                 hover:shadow-lg hover:-translate-y-0.5
                 ${isSelected
-                  ? "border-primary shadow-lg shadow-primary/10 bg-card ring-2 ring-primary/20"
-                  : "border-border bg-card hover:border-primary/40"
+                  ? "border-primary shadow-lg shadow-primary/10 bg-card ring-2 ring-primary/20 z-10"
+                  : "border-border bg-card hover:border-primary/40 z-[1]"
                 }
               `}
+              style={{
+                left: node.x + PADDING,
+                top: node.y + PADDING,
+                width: NODE_W,
+                minHeight: NODE_H,
+              }}
             >
-              {/* Step number badge */}
-              <div className="absolute -top-3 -left-2">
+              {/* Step number */}
+              <div className="absolute -top-2.5 -left-2">
                 <div className={`
-                  h-6 w-6 rounded-full flex items-center justify-center text-xs font-bold shadow-sm
+                  h-5 w-5 rounded-full flex items-center justify-center text-[10px] font-bold shadow-sm
                   ${isSelected ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"}
                 `}>
-                  {i + 1}
+                  {stepIndex + 1}
                 </div>
               </div>
 
-              {/* Start badge */}
-              {isStart && (
-                <div className="absolute -top-2.5 right-2">
-                  <Badge className="text-[9px] h-5 bg-accent text-accent-foreground border-0">
-                    START
+              {/* Branching indicator */}
+              {isBranching && (
+                <div className="absolute -top-2 right-2">
+                  <Badge className="text-[9px] h-4 bg-primary/10 text-primary border border-primary/20 gap-0.5">
+                    <GitBranch className="h-2.5 w-2.5" />
+                    {step.transitions.filter(t => t.next_step_id).length}
                   </Badge>
                 </div>
               )}
 
-              <div className="flex items-start gap-3">
-                {/* Type icon */}
-                <div className={`${config.bgColor} rounded-lg p-2 shrink-0`}>
-                  <Icon className={`h-5 w-5 ${config.color}`} />
+              <div className="flex items-start gap-2">
+                <div className={`${config.bgColor} rounded-lg p-1.5 shrink-0`}>
+                  <Icon className={`h-4 w-4 ${config.color}`} />
                 </div>
-
-                {/* Content */}
                 <div className="flex-1 min-w-0">
-                  <h3 className="font-semibold text-sm leading-tight truncate">{step.title}</h3>
+                  <h3 className="font-semibold text-xs leading-tight truncate">{step.title}</h3>
                   {step.description && (
-                    <p className="text-xs text-muted-foreground mt-0.5 truncate">{step.description}</p>
+                    <p className="text-[10px] text-muted-foreground mt-0.5 truncate">{step.description}</p>
                   )}
-
-                  {/* Meta info row */}
-                  <div className="flex items-center gap-2 mt-2 flex-wrap">
-                    <Badge variant="outline" className="text-[10px] h-5 gap-1">
-                      <Icon className="h-2.5 w-2.5" />
+                  <div className="flex items-center gap-1 mt-1.5 flex-wrap">
+                    <Badge variant="outline" className="text-[9px] h-4 gap-0.5 px-1">
+                      <Icon className="h-2 w-2" />
                       {config.label}
                     </Badge>
                     {step.questions.length > 0 && (
-                      <Badge variant="secondary" className="text-[10px] h-5">
+                      <Badge variant="secondary" className="text-[9px] h-4 px-1">
                         {step.questions.length} {step.questions.length === 1 ? "fråga" : "frågor"}
                       </Badge>
                     )}
                     {hasConditions && (
-                      <Badge variant="outline" className="text-[10px] h-5 gap-1 border-accent/50 text-accent">
-                        <Filter className="h-2.5 w-2.5" /> Villkor
+                      <Badge variant="outline" className="text-[9px] h-4 gap-0.5 px-1 border-primary/50 text-primary">
+                        <Filter className="h-2 w-2" />
                       </Badge>
                     )}
                     {hasActions && (
-                      <Badge variant="outline" className="text-[10px] h-5 gap-1 border-warning/50 text-warning">
-                        <Zap className="h-2.5 w-2.5" /> {step.pre_actions.length + step.post_actions.length}
+                      <Badge variant="outline" className="text-[9px] h-4 gap-0.5 px-1 border-amber-500/50 text-amber-500">
+                        <Zap className="h-2 w-2" />
                       </Badge>
                     )}
                   </div>
                 </div>
-
-                {/* Selection indicator */}
-                <div className={`
-                  w-2 h-2 rounded-full shrink-0 mt-1 transition-colors
-                  ${isSelected ? "bg-primary" : "bg-transparent group-hover:bg-primary/30"}
-                `} />
               </div>
+            </button>
+          );
+        })}
 
-              {/* Branch indicators */}
-              {branches.length > 0 && (
-                <div className="mt-2 pt-2 border-t border-dashed border-border/60">
-                  {branches.map((t, ti) => {
-                    const targetStep = steps.find(s => s.id === t.next_step_id);
-                    return (
-                      <div key={ti} className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
-                        <GitBranch className="h-2.5 w-2.5 text-accent" />
-                        <span>
-                          {t.condition ? "Om villkor →" : "→"} {targetStep?.title ?? "?"}
-                        </span>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
+        {/* Add step button at bottom of each leaf */}
+        {allNodes.filter(n => n.children.length === 0).map((leaf) => (
+          <div
+            key={`add-${leaf.step.id}`}
+            className="absolute flex flex-col items-center"
+            style={{
+              left: leaf.x + PADDING + NODE_W / 2 - 14,
+              top: leaf.y + PADDING + NODE_H + 10,
+            }}
+          >
+            <div className="w-0.5 h-4 bg-border" />
+            <button
+              onClick={onAddStep}
+              className="h-7 w-7 rounded-full border-2 border-dashed border-muted-foreground/30 hover:border-primary hover:bg-primary/5 flex items-center justify-center transition-all"
+              title="Lägg till steg"
+            >
+              <Plus className="h-3.5 w-3.5 text-muted-foreground hover:text-primary" />
             </button>
           </div>
-        );
-      })}
+        ))}
 
-      {/* Add step button */}
-      <div className="flex flex-col items-center mt-1">
-        <div className="w-0.5 h-4 bg-border" />
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={onAddStep}
-          className="rounded-full border-dashed border-2 hover:border-primary hover:bg-primary/5 transition-all gap-1.5 mt-1"
-        >
-          <PlusCircle className="h-4 w-4" /> Lägg till steg
-        </Button>
-      </div>
-
-      {/* End indicator */}
-      <div className="flex items-center gap-2 mt-4">
-        <div className="h-8 w-8 rounded-full bg-muted flex items-center justify-center border-2 border-muted-foreground/20">
-          <div className="h-3 w-3 rounded-full bg-muted-foreground/40" />
-        </div>
-        <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Slut</span>
+        {/* End indicators for leaves without further transitions */}
+        {allNodes
+          .filter(n => n.children.length === 0)
+          .map((leaf) => (
+            <div
+              key={`end-${leaf.step.id}`}
+              className="absolute flex items-center gap-1.5"
+              style={{
+                left: leaf.x + PADDING + NODE_W / 2 - 30,
+                top: leaf.y + PADDING + NODE_H + 50,
+              }}
+            >
+              <div className="h-6 w-6 rounded-full bg-muted flex items-center justify-center border-2 border-muted-foreground/20">
+                <div className="h-2.5 w-2.5 rounded-full bg-muted-foreground/40" />
+              </div>
+              <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Slut</span>
+            </div>
+          ))}
       </div>
     </div>
   );
