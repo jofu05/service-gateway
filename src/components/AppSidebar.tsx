@@ -1,6 +1,6 @@
 import {
   LayoutDashboard, PlusCircle, ListTodo, BarChart3,
-  GitBranch, Settings, FileText, Shield, LogOut, User
+  GitBranch, Settings, FileText, Shield, LogOut, User, Zap
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useAuth } from "@/contexts/AuthContext";
@@ -23,6 +23,7 @@ const editorItems = [
 ];
 
 const adminItems = [
+  { title: "Åtgärder", url: "/admin/actions", icon: Zap },
   { title: "Roller & grupper", url: "/admin/roles", icon: Shield },
   { title: "Loggar", url: "/admin/logs", icon: FileText },
   { title: "Inställningar", url: "/admin/settings", icon: Settings },
