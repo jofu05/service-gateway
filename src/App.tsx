@@ -17,6 +17,7 @@ import FlowPreviewPage from "./pages/editor/FlowPreviewPage";
 import RoleMapping from "./pages/admin/RoleMapping";
 import AuditLogs from "./pages/admin/AuditLogs";
 import IntegrationSettings from "./pages/admin/IntegrationSettings";
+import ActionsManager from "./pages/admin/ActionsManager";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -69,6 +70,7 @@ const App = () => (
               <Route path="/editor/flows/:id" element={<EditorRoute><FlowEditorPage /></EditorRoute>} />
               <Route path="/editor/flows/:id/preview" element={<EditorRoute><FlowPreviewPage /></EditorRoute>} />
               <Route path="/editor/flows/preview" element={<EditorRoute><FlowPreviewPage /></EditorRoute>} />
+              <Route path="/admin/actions" element={<AdminRoute><ActionsManager /></AdminRoute>} />
               <Route path="/admin/roles" element={<AdminRoute><RoleMapping /></AdminRoute>} />
               <Route path="/admin/logs" element={<AdminRoute><AuditLogs /></AdminRoute>} />
               <Route path="/admin/settings" element={<AdminRoute><IntegrationSettings /></AdminRoute>} />
