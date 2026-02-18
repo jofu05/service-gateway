@@ -1,4 +1,5 @@
 import type { FlowAction, ActionType, ActionTrigger, ActionErrorHandling } from "@/lib/flow-engine/types";
+import { supabase } from "@/integrations/supabase/client";
 
 export interface ActionTemplate extends FlowAction {
   description: string;
@@ -27,92 +28,146 @@ export const ERROR_STRATEGIES: { value: ActionErrorHandling["strategy"]; label: 
   { value: "stop", label: "Stoppa flödet" },
 ];
 
-export const DEFAULT_ACTION_TEMPLATES: ActionTemplate[] = [
-  {
-    id: "act-1",
-    name: "Hämta platser",
-    description: "Hämtar tillgängliga platser/kontor från POB",
-    type: "lookup",
-    trigger: "pre_step",
-    input_template: { type: "locations" },
-    output_mapping: { "lookups.locations": "result" },
-    error_handling: { strategy: "retry", max_retries: 3, user_message: "Kunde inte hämta platser" },
-    global: true,
-    created_at: "2025-01-15",
-  },
-  {
-    id: "act-2",
-    name: "Kategorisera ärende",
-    description: "AI-baserad kategorisering utifrån beskrivning",
-    type: "enrichment",
-    trigger: "on_change",
-    trigger_question_id: "description",
-    input_template: { text: "{{answers.description}}" },
-    output_mapping: { "derived.suggestedCategory": "result.suggested_category" },
-    error_handling: { strategy: "skip" },
-    global: true,
-    created_at: "2025-02-01",
-  },
-  {
-    id: "act-3",
-    name: "Skapa ärende i POB",
-    description: "Skapar ett nytt ärende i ärendesystemet",
-    type: "automation",
-    trigger: "post_step",
-    input_template: {
-      title: "{{answers.title}}",
-      description: "{{answers.description}}",
-      category: "{{answers.category}}",
-      priority: "{{answers.priority}}",
+// Convert DB row to ActionTemplate
+function rowToTemplate(row: any): ActionTemplate {
+  const errorConfig = (row.error_config as any) || {};
+  return {
+    id: row.id,
+    name: row.name,
+    description: row.description || "",
+    type: (row.type || "lookup") as ActionType,
+    trigger: "pre_step" as ActionTrigger,
+    input_template: (row.input_template as Record<string, any>) || {},
+    output_mapping: (row.output_mapping as Record<string, any>) || {},
+    error_handling: {
+      strategy: errorConfig.strategy || "retry",
+      max_retries: errorConfig.max_retries,
+      user_message: errorConfig.user_message,
     },
-    output_mapping: { "derived.ticketId": "result.id" },
-    error_handling: { strategy: "stop", user_message: "Kunde inte skapa ärendet" },
     global: true,
-    created_at: "2025-02-10",
-  },
-  {
-    id: "act-4",
-    name: "Skicka bekräftelse",
-    description: "Skickar bekräftelsenotis till användaren",
-    type: "notification",
-    trigger: "post_step",
-    input_template: { message: "Ditt ärende {{derived.ticketId}} har skapats" },
-    output_mapping: {},
-    error_handling: { strategy: "skip" },
-    global: false,
-    created_at: "2025-03-05",
-  },
-];
+    created_at: row.created_at?.split("T")[0] || "",
+  };
+}
 
-// Simple in-memory store with listeners for cross-component sync
-let _actions: ActionTemplate[] = [...DEFAULT_ACTION_TEMPLATES];
+// In-memory cache with listeners
+let _actions: ActionTemplate[] = [];
+let _loaded = false;
 const _listeners = new Set<() => void>();
 
-export function getActionTemplates(): ActionTemplate[] {
+function notify() {
+  _listeners.forEach(fn => fn());
+}
+
+export async function fetchActionTemplates(): Promise<ActionTemplate[]> {
+  const { data, error } = await supabase
+    .from("action_templates")
+    .select("*")
+    .order("created_at", { ascending: false });
+
+  if (error) {
+    console.error("Error fetching action templates:", error);
+    return _actions;
+  }
+
+  _actions = (data || []).map(rowToTemplate);
+  _loaded = true;
+  notify();
   return _actions;
 }
 
-export function setActionTemplates(actions: ActionTemplate[]): void {
-  _actions = actions;
-  _listeners.forEach(fn => fn());
+export function getActionTemplates(): ActionTemplate[] {
+  if (!_loaded) {
+    fetchActionTemplates();
+  }
+  return _actions;
 }
 
-export function addActionTemplate(action: ActionTemplate): void {
-  _actions = [..._actions, action];
-  _listeners.forEach(fn => fn());
+export async function createActionTemplate(template: ActionTemplate): Promise<ActionTemplate | null> {
+  const { data, error } = await supabase
+    .from("action_templates")
+    .insert({
+      name: template.name,
+      description: template.description,
+      type: template.type,
+      method: "POST",
+      endpoint: "",
+      input_template: template.input_template as any,
+      output_mapping: template.output_mapping as any,
+      error_config: {
+        strategy: template.error_handling.strategy,
+        max_retries: template.error_handling.max_retries,
+        user_message: template.error_handling.user_message,
+        retry: template.error_handling.strategy === "retry",
+      } as any,
+    })
+    .select()
+    .single();
+
+  if (error) {
+    console.error("Error creating action template:", error);
+    return null;
+  }
+
+  const created = rowToTemplate(data);
+  _actions = [created, ..._actions];
+  notify();
+  return created;
 }
 
-export function updateActionTemplate(id: string, updates: Partial<ActionTemplate>): void {
-  _actions = _actions.map(a => a.id === id ? { ...a, ...updates } : a);
-  _listeners.forEach(fn => fn());
+export async function updateActionTemplate(id: string, template: Partial<ActionTemplate>): Promise<boolean> {
+  const updates: any = {};
+  if (template.name !== undefined) updates.name = template.name;
+  if (template.description !== undefined) updates.description = template.description;
+  if (template.type !== undefined) updates.type = template.type;
+  if (template.input_template !== undefined) updates.input_template = template.input_template;
+  if (template.output_mapping !== undefined) updates.output_mapping = template.output_mapping;
+  if (template.error_handling !== undefined) {
+    updates.error_config = {
+      strategy: template.error_handling.strategy,
+      max_retries: template.error_handling.max_retries,
+      user_message: template.error_handling.user_message,
+      retry: template.error_handling.strategy === "retry",
+    };
+  }
+
+  const { error } = await supabase
+    .from("action_templates")
+    .update(updates)
+    .eq("id", id);
+
+  if (error) {
+    console.error("Error updating action template:", error);
+    return false;
+  }
+
+  _actions = _actions.map(a => a.id === id ? { ...a, ...template } : a);
+  notify();
+  return true;
 }
 
-export function deleteActionTemplate(id: string): void {
+export async function deleteActionTemplate(id: string): Promise<boolean> {
+  const { error } = await supabase
+    .from("action_templates")
+    .delete()
+    .eq("id", id);
+
+  if (error) {
+    console.error("Error deleting action template:", error);
+    return false;
+  }
+
   _actions = _actions.filter(a => a.id !== id);
-  _listeners.forEach(fn => fn());
+  notify();
+  return true;
 }
 
+// Keep subscribe for cross-component sync
 export function subscribeActionTemplates(fn: () => void): () => void {
   _listeners.add(fn);
   return () => _listeners.delete(fn);
+}
+
+// Legacy compat - no-op for setActionTemplates
+export function setActionTemplates(_actions_: ActionTemplate[]): void {
+  // No longer used - kept for compat
 }

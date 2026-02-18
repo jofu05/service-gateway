@@ -11,19 +11,16 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogD
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import {
   Zap, Plus, Pencil, Trash2, Search, Copy,
-  ArrowUpDown, AlertTriangle, Play, Eye
+  ArrowUpDown, AlertTriangle, Play, Eye, Loader2
 } from "lucide-react";
 import { toast } from "sonner";
 import type { ActionType, ActionTrigger, ActionErrorHandling } from "@/lib/flow-engine/types";
 import {
   type ActionTemplate,
   ACTION_TYPES, TRIGGER_TYPES, ERROR_STRATEGIES,
-  getActionTemplates, setActionTemplates, subscribeActionTemplates,
+  getActionTemplates, subscribeActionTemplates,
+  fetchActionTemplates, createActionTemplate, updateActionTemplate, deleteActionTemplate,
 } from "@/lib/action-templates";
-
-// Re-exported from shared store
-
-// Templates come from shared store
 
 const emptyAction: ActionTemplate = {
   id: "",
@@ -56,18 +53,15 @@ function triggerLabel(trigger: ActionTrigger) {
 
 export default function ActionsManager() {
   const [actions, setLocalActions] = useState<ActionTemplate[]>(getActionTemplates());
-  
-  // Sync with shared store
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+
   useEffect(() => {
+    fetchActionTemplates().finally(() => setLoading(false));
     const unsub = subscribeActionTemplates(() => setLocalActions(getActionTemplates()));
     return unsub;
   }, []);
-  
-  const setActions = (updater: ActionTemplate[] | ((prev: ActionTemplate[]) => ActionTemplate[])) => {
-    const next = typeof updater === "function" ? updater(actions) : updater;
-    setLocalActions(next);
-    setActionTemplates(next);
-  };
+
   const [search, setSearch] = useState("");
   const [filterType, setFilterType] = useState<string>("all");
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -75,7 +69,6 @@ export default function ActionsManager() {
   const [detailAction, setDetailAction] = useState<ActionTemplate | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
 
-  // Form state
   const [form, setForm] = useState<ActionTemplate>(emptyAction);
   const [inputPairs, setInputPairs] = useState<{ key: string; value: string }[]>([]);
   const [outputPairs, setOutputPairs] = useState<{ key: string; value: string }[]>([]);
@@ -88,8 +81,7 @@ export default function ActionsManager() {
   });
 
   function openCreate() {
-    const newAction = { ...emptyAction, id: `act-${Date.now()}` };
-    setForm(newAction);
+    setForm({ ...emptyAction, id: "" });
     setInputPairs([{ key: "", value: "" }]);
     setOutputPairs([{ key: "", value: "" }]);
     setEditAction(null);
@@ -98,23 +90,20 @@ export default function ActionsManager() {
 
   function openEdit(action: ActionTemplate) {
     setForm({ ...action });
-    setInputPairs(
-      Object.entries(action.input_template).map(([key, value]) => ({ key, value: String(value) }))
-    );
-    setOutputPairs(
-      Object.entries(action.output_mapping).map(([key, value]) => ({ key, value: String(value) }))
-    );
-    if (inputPairs.length === 0) setInputPairs([{ key: "", value: "" }]);
-    if (outputPairs.length === 0) setOutputPairs([{ key: "", value: "" }]);
+    const ip = Object.entries(action.input_template).map(([key, value]) => ({ key, value: String(value) }));
+    const op = Object.entries(action.output_mapping).map(([key, value]) => ({ key, value: String(value) }));
+    setInputPairs(ip.length ? ip : [{ key: "", value: "" }]);
+    setOutputPairs(op.length ? op : [{ key: "", value: "" }]);
     setEditAction(action);
     setDialogOpen(true);
   }
 
-  function handleSave() {
+  async function handleSave() {
     if (!form.name.trim()) {
       toast.error("Namn krävs");
       return;
     }
+    setSaving(true);
     const inputTemplate: Record<string, string> = {};
     inputPairs.filter(p => p.key.trim()).forEach(p => { inputTemplate[p.key] = p.value; });
     const outputMapping: Record<string, string> = {};
@@ -127,35 +116,48 @@ export default function ActionsManager() {
     };
 
     if (editAction) {
-      setActions(prev => prev.map(a => a.id === saved.id ? saved : a));
-      toast.success("Åtgärd uppdaterad");
+      const ok = await updateActionTemplate(saved.id, saved);
+      if (ok) toast.success("Åtgärd uppdaterad");
+      else toast.error("Kunde inte uppdatera åtgärden");
     } else {
-      setActions(prev => [...prev, saved]);
-      toast.success("Åtgärd skapad");
+      const created = await createActionTemplate(saved);
+      if (created) toast.success("Åtgärd skapad");
+      else toast.error("Kunde inte skapa åtgärden");
     }
+    setSaving(false);
     setDialogOpen(false);
   }
 
-  function handleDelete(id: string) {
-    setActions(prev => prev.filter(a => a.id !== id));
+  async function handleDelete(id: string) {
+    const ok = await deleteActionTemplate(id);
+    if (ok) toast.success("Åtgärd borttagen");
+    else toast.error("Kunde inte ta bort åtgärden");
     setDeleteConfirm(null);
-    toast.success("Åtgärd borttagen");
   }
 
-  function handleDuplicate(action: ActionTemplate) {
+  async function handleDuplicate(action: ActionTemplate) {
     const dup: ActionTemplate = {
       ...action,
-      id: `act-${Date.now()}`,
+      id: "",
       name: `${action.name} (kopia)`,
       created_at: new Date().toISOString().split("T")[0],
     };
-    setActions(prev => [...prev, dup]);
-    toast.success("Åtgärd duplicerad");
+    const created = await createActionTemplate(dup);
+    if (created) toast.success("Åtgärd duplicerad");
+    else toast.error("Kunde inte duplicera åtgärden");
   }
 
   function handleTest(action: ActionTemplate) {
     toast.info(`Testar "${action.name}"...`, { duration: 1500 });
     setTimeout(() => toast.success(`"${action.name}" kördes utan fel (mock)`), 1500);
+  }
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-20 text-muted-foreground">
+        <Loader2 className="h-5 w-5 animate-spin mr-2" /> Laddar åtgärder...
+      </div>
+    );
   }
 
   return (
@@ -542,7 +544,10 @@ export default function ActionsManager() {
 
           <DialogFooter>
             <Button variant="outline" onClick={() => setDialogOpen(false)}>Avbryt</Button>
-            <Button onClick={handleSave}>{editAction ? "Spara" : "Skapa"}</Button>
+            <Button onClick={handleSave} disabled={saving}>
+              {saving && <Loader2 className="mr-1 h-4 w-4 animate-spin" />}
+              {editAction ? "Spara" : "Skapa"}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
