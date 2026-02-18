@@ -66,6 +66,7 @@ export default function RuleBuilder({ condition, onChange, flowTree, currentStep
         condition={condition}
         onChange={onChange}
         variables={variables}
+        flowTree={flowTree}
       />
       <div className="flex gap-1">
         <Button
@@ -101,24 +102,35 @@ export default function RuleBuilder({ condition, onChange, flowTree, currentStep
   );
 }
 
-function SimpleRule({ condition, onChange, variables }: {
+function SimpleRule({ condition, onChange, variables, flowTree }: {
   condition: ConditionExpression;
   onChange: (c: ConditionExpression) => void;
   variables: ReturnType<typeof getAvailableVariables>;
+  flowTree: FlowTree;
 }) {
   const needsValue = VALUE_OPERATORS.includes(condition.type);
 
-  // Build field options: answers fields + user fields
   const fieldOptions = variables.map(v => ({
     value: v.path,
     label: v.label,
   }));
 
+  // Resolve options for the selected field if it's a question with predefined choices
+  const fieldOptions2 = (() => {
+    if (!condition.field?.startsWith("answers.")) return null;
+    const qId = condition.field.replace("answers.", "");
+    for (const step of flowTree.steps) {
+      const q = step.questions.find(q => q.id === qId);
+      if (q?.options && q.options.length > 0) return q.options;
+    }
+    return null;
+  })();
+
   return (
     <div className="flex flex-wrap items-center gap-1.5">
       <span className="text-xs font-medium text-muted-foreground shrink-0">När</span>
 
-      <Select value={condition.field || ""} onValueChange={f => onChange({ ...condition, field: f })}>
+      <Select value={condition.field || ""} onValueChange={f => onChange({ ...condition, field: f, value: "" })}>
         <SelectTrigger className="h-7 text-xs w-auto min-w-[140px]">
           <SelectValue placeholder="Välj fält..." />
         </SelectTrigger>
@@ -145,12 +157,27 @@ function SimpleRule({ condition, onChange, variables }: {
       </Select>
 
       {needsValue && (
-        <Input
-          value={condition.value ?? ""}
-          onChange={e => onChange({ ...condition, value: e.target.value })}
-          placeholder="Värde..."
-          className="h-7 text-xs w-auto min-w-[100px] max-w-[160px]"
-        />
+        fieldOptions2 ? (
+          <Select value={condition.value ?? ""} onValueChange={v => onChange({ ...condition, value: v })}>
+            <SelectTrigger className="h-7 text-xs w-auto min-w-[120px]">
+              <SelectValue placeholder="Välj värde..." />
+            </SelectTrigger>
+            <SelectContent>
+              {fieldOptions2.map(o => (
+                <SelectItem key={o.value} value={o.value}>
+                  {o.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        ) : (
+          <Input
+            value={condition.value ?? ""}
+            onChange={e => onChange({ ...condition, value: e.target.value })}
+            placeholder="Värde..."
+            className="h-7 text-xs w-auto min-w-[100px] max-w-[160px]"
+          />
+        )
       )}
     </div>
   );
@@ -237,6 +264,7 @@ function CompoundRule({ condition, onChange, flowTree, currentStepId, variables 
                 condition={child}
                 onChange={c => updateChild(i, c)}
                 variables={variables}
+                flowTree={flowTree}
               />
             )}
           </div>
