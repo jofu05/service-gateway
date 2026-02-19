@@ -4,6 +4,7 @@ import { evaluateCondition } from "@/lib/flow-engine/condition-evaluator";
 import { runAction } from "@/lib/flow-engine/action-runner";
 import { getStepSuggestions, getReviewSummary } from "@/lib/flow-engine/ai-mock";
 import { useAuth } from "@/contexts/AuthContext";
+import { cmdbGateway } from "@/lib/cmdb";
 
 export function useFlowRuntime(flowTree: FlowTree) {
   const { user, roles } = useAuth();
@@ -18,11 +19,38 @@ export function useFlowRuntime(flowTree: FlowTree) {
     answers: {},
     lookups: {},
     derived: {},
+    cmdb: {},
     ai_suggestions: [],
     logs: [],
     current_step_id: flowTree.flow.start_step_id,
     step_history: [flowTree.flow.start_step_id],
   }));
+
+  // Load CMDB data on mount
+  useEffect(() => {
+    (async () => {
+      try {
+        const overview = await cmdbGateway.getMyOverview(user?.id);
+        const primaryDevice = overview.devices.find(d => d.type === "laptop") ?? overview.devices[0] ?? null;
+        setCtx(prev => ({
+          ...prev,
+          cmdb: {
+            identity: overview.identity,
+            devices: overview.devices,
+            primaryDevice,
+            deviceCount: overview.devices.length,
+            hasDevices: overview.devices.length > 0,
+            applications: overview.applications,
+            systemAccess: overview.systemAccess,
+            permissions: overview.permissions,
+            system: overview.systemAccess[0] ?? {},
+          },
+        }));
+      } catch (e) {
+        console.error("Failed to load CMDB data:", e);
+      }
+    })();
+  }, [user?.id]);
 
   const [isRunningActions, setIsRunningActions] = useState(false);
   const [actionErrors, setActionErrors] = useState<string[]>([]);

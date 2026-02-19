@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
-import { Braces, User, MessageSquare, Database } from "lucide-react";
+import { Braces, User, MessageSquare, Database, Monitor } from "lucide-react";
 import type { FlowTree } from "@/lib/flow-engine/types";
 import { getAvailableVariables, type AvailableVariable } from "@/lib/flow-engine/utils";
 
@@ -18,6 +18,7 @@ const CATEGORY_META: Record<AvailableVariable["category"], { label: string; icon
   answers: { label: "Svar", icon: <MessageSquare className="h-3 w-3" /> },
   lookups: { label: "Uppslagna värden", icon: <Database className="h-3 w-3" /> },
   derived: { label: "Beräknade värden", icon: <Database className="h-3 w-3" /> },
+  cmdb: { label: "CMDB", icon: <Monitor className="h-3 w-3" /> },
 };
 
 export default function VariablePicker({ flowTree, currentStepId, onInsert }: VariablePickerProps) {

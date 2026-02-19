@@ -1,7 +1,7 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Database, User, MessageSquare, Copy, Braces } from "lucide-react";
+import { Database, User, MessageSquare, Copy, Braces, Monitor } from "lucide-react";
 import { toast } from "sonner";
 import type { FlowTree } from "@/lib/flow-engine/types";
 import { getAvailableVariables, type AvailableVariable } from "@/lib/flow-engine/utils";
@@ -16,6 +16,7 @@ const CATEGORY_META: Record<AvailableVariable["category"], { label: string; icon
   answers: { label: "Svar från frågor", icon: <MessageSquare className="h-3.5 w-3.5" />, color: "text-accent" },
   lookups: { label: "Uppslagna värden", icon: <Database className="h-3.5 w-3.5" />, color: "text-warning" },
   derived: { label: "Beräknade värden", icon: <Database className="h-3.5 w-3.5" />, color: "text-info" },
+  cmdb: { label: "CMDB", icon: <Monitor className="h-3.5 w-3.5" />, color: "text-emerald-500" },
 };
 
 export default function DataPanel({ flowTree, currentStepId }: DataPanelProps) {

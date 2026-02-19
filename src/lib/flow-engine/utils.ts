@@ -28,7 +28,7 @@ export function resolveText(text: string, ctx: RuntimeContext): string {
 export interface AvailableVariable {
   path: string;
   label: string;
-  category: "user" | "answers" | "lookups" | "derived";
+  category: "user" | "answers" | "lookups" | "derived" | "cmdb";
 }
 
 /**
@@ -58,6 +58,27 @@ export function getAvailableVariables(flowTree: FlowTree, upToStepId?: string): 
       });
     }
   }
+
+  // CMDB variables – always available
+  vars.push(
+    { path: "cmdb.identity.displayName", label: "CMDB Användarnamn", category: "cmdb" },
+    { path: "cmdb.identity.email", label: "CMDB E-post", category: "cmdb" },
+    { path: "cmdb.identity.department", label: "CMDB Avdelning", category: "cmdb" },
+    { path: "cmdb.identity.title", label: "CMDB Titel", category: "cmdb" },
+    { path: "cmdb.devices", label: "Enheter (lista)", category: "cmdb" },
+    { path: "cmdb.primaryDevice.name", label: "Primär enhet", category: "cmdb" },
+    { path: "cmdb.primaryDevice.type", label: "Primär enhetstyp", category: "cmdb" },
+    { path: "cmdb.primaryDevice.batteryHealth", label: "Batterihälsa", category: "cmdb" },
+    { path: "cmdb.deviceCount", label: "Antal enheter", category: "cmdb" },
+    { path: "cmdb.hasDevices", label: "Har enheter (ja/nej)", category: "cmdb" },
+    { path: "cmdb.applications", label: "Applikationer (lista)", category: "cmdb" },
+    { path: "cmdb.systemAccess", label: "Systemåtkomst (lista)", category: "cmdb" },
+    { path: "cmdb.system.name", label: "System namn", category: "cmdb" },
+    { path: "cmdb.system.owner", label: "Systemägare", category: "cmdb" },
+    { path: "cmdb.system.manager", label: "Förvaltare", category: "cmdb" },
+    { path: "cmdb.system.operationsLead", label: "Driftansvarig", category: "cmdb" },
+    { path: "cmdb.system.criticality", label: "Systemkritikalitet", category: "cmdb" },
+  );
 
   return vars;
 }
