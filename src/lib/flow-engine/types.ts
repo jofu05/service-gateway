@@ -120,6 +120,7 @@ export interface RuntimeContext {
   answers: Record<string, any>;
   lookups: Record<string, any>;
   derived: Record<string, any>;
+  cmdb: Record<string, any>;
   ai_suggestions: AiSuggestion[];
   logs: RuntimeLogEntry[];
   current_step_id: string;

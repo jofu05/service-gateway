@@ -1,5 +1,6 @@
 import type { FlowAction, RuntimeContext, RuntimeLogEntry } from "./types";
 import { pobApi } from "@/lib/mock-api";
+import { cmdbGateway } from "@/lib/cmdb";
 
 /**
  * Resolves template strings like "{{answers.searchText}}" against context
@@ -58,6 +59,31 @@ export async function runAction(
     switch (action.type) {
       case "lookup": {
         const lookupType = inputs.type || inputs.lookupType || "locations";
+
+        // CMDB lookups
+        if (lookupType === "cmdb.devices") {
+          result = await cmdbGateway.getUserDevices(inputs.userId || undefined);
+          break;
+        }
+        if (lookupType === "cmdb.systems") {
+          result = inputs.query
+            ? await cmdbGateway.searchSystems(inputs.query)
+            : await cmdbGateway.getAllSystems();
+          break;
+        }
+        if (lookupType === "cmdb.systemTree") {
+          result = await cmdbGateway.getSystemTree(inputs.systemId || "sys-1");
+          break;
+        }
+        if (lookupType === "cmdb.applications") {
+          result = await cmdbGateway.getAllApplications();
+          break;
+        }
+        if (lookupType === "cmdb.application") {
+          result = await cmdbGateway.getApplication(inputs.applicationId || "app-1");
+          break;
+        }
+
         result = await pobApi.getLookups(lookupType);
         break;
       }

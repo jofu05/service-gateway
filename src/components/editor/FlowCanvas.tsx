@@ -119,6 +119,14 @@ function getConditionLabel(t: TransitionRule, flow: FlowTree): string {
   if (c.type === "has_role") return `Roll: ${c.value}`;
   if (c.type === "in_group") return `Grupp: ${c.value}`;
 
+  // CMDB field labels
+  if (c.field?.startsWith("cmdb.")) {
+    const label = c.field.replace("cmdb.", "CMDB: ");
+    if (c.type === "equals") return `${label} = "${c.value}"`;
+    if (c.type === "exists") return `${label} finns`;
+    return `${label} ${c.type} ${c.value ?? ""}`;
+  }
+
   return c.field ? `${c.field} ${c.type} ${c.value ?? ""}` : "Villkor";
 }
 
