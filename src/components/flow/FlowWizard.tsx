@@ -1,8 +1,9 @@
-import { useState } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { useFlowRuntime } from "@/hooks/use-flow-runtime";
 import type { FlowTree, FlowQuestion, AiSuggestion } from "@/lib/flow-engine/types";
 import { evaluateCondition } from "@/lib/flow-engine/condition-evaluator";
 import { resolveText } from "@/lib/flow-engine/utils";
+import { fetchDynamicOptions, optionsCacheKey } from "@/lib/cmdb/dynamic-options";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -29,6 +30,73 @@ export default function FlowWizard({ flowTree, onSubmit, onClose }: FlowWizardPr
   const { ctx, currentStep, isFirstStep, isReviewStep, progress, isRunningActions, actionErrors } = runtime;
   const [showAiPanel, setShowAiPanel] = useState(flowTree.flow.ai_enabled);
 
+  // Dynamic options state
+  const [dynamicOptions, setDynamicOptions] = useState<Record<string, { value: string; label: string }[]>>({});
+  const [loadingOptions, setLoadingOptions] = useState<Set<string>>(new Set());
+  const [optionErrors, setOptionErrors] = useState<Record<string, string>>({});
+  const optionsCacheRef = useRef<Map<string, { value: string; label: string }[]>>(new Map());
+
+  // Load dynamic options for current step
+  useEffect(() => {
+    if (!currentStep) return;
+    const dynamicQuestions = currentStep.questions.filter(
+      q => q.optionsMode === "dynamic" && q.dynamicOptions
+    );
+    if (dynamicQuestions.length === 0) return;
+
+    dynamicQuestions.forEach(async (q) => {
+      const config = q.dynamicOptions!;
+      const params = config.params
+        ? Object.fromEntries(
+            Object.entries(config.params).map(([k, v]) =>
+              [k, v.replace(/\{\{([\w.]+)\}\}/g, (_, path) => {
+                const parts = path.split(".");
+                let current: any = ctx;
+                for (const p of parts) {
+                  if (current == null) return "";
+                  current = current[p];
+                }
+                return String(current ?? "");
+              })]
+            )
+          )
+        : {};
+
+      const cacheKey = optionsCacheKey(q.id, params);
+      if (optionsCacheRef.current.has(cacheKey)) {
+        setDynamicOptions(prev => ({ ...prev, [q.id]: optionsCacheRef.current.get(cacheKey)! }));
+        return;
+      }
+
+      setLoadingOptions(prev => new Set(prev).add(q.id));
+      setOptionErrors(prev => { const n = { ...prev }; delete n[q.id]; return n; });
+
+      try {
+        const options = await fetchDynamicOptions(config, ctx);
+        optionsCacheRef.current.set(cacheKey, options);
+        setDynamicOptions(prev => ({ ...prev, [q.id]: options }));
+      } catch (err) {
+        setOptionErrors(prev => ({ ...prev, [q.id]: "Kunde inte hämta alternativ" }));
+      } finally {
+        setLoadingOptions(prev => { const n = new Set(prev); n.delete(q.id); return n; });
+      }
+    });
+  }, [currentStep?.id, ctx.answers]);
+
+  // Invalidate cache when dependsOn answers change
+  useEffect(() => {
+    if (!currentStep) return;
+    currentStep.questions.forEach(q => {
+      if (q.optionsMode !== "dynamic" || !q.dynamicOptions?.dependsOn) return;
+      // Clear cache for this question so it reloads
+      const keysToDelete: string[] = [];
+      optionsCacheRef.current.forEach((_, key) => {
+        if (key.startsWith(q.id + ":")) keysToDelete.push(key);
+      });
+      keysToDelete.forEach(k => optionsCacheRef.current.delete(k));
+    });
+  }, [currentStep?.id, ...Object.keys(ctx.answers).map(k => ctx.answers[k])]);
+
   const handleSubmit = () => {
     onSubmit?.(ctx.answers);
     toast.success("Ärende inskickat!");
@@ -38,7 +106,6 @@ export default function FlowWizard({ flowTree, onSubmit, onClose }: FlowWizardPr
     return <div className="p-8 text-center text-muted-foreground">Flödet kunde inte laddas</div>;
   }
 
-  // Resolve dynamic text in step fields
   const resolvedTitle = resolveText(currentStep.title, ctx);
   const resolvedDescription = resolveText(currentStep.description, ctx);
   const resolvedHelptext = currentStep.helptext ? resolveText(currentStep.helptext, ctx) : undefined;
@@ -55,7 +122,6 @@ export default function FlowWizard({ flowTree, onSubmit, onClose }: FlowWizardPr
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        {/* Main wizard area */}
         <div className={showAiPanel ? "lg:col-span-2" : "lg:col-span-3"}>
           <Card>
             <CardHeader>
@@ -103,6 +169,9 @@ export default function FlowWizard({ flowTree, onSubmit, onClose }: FlowWizardPr
                         onChange={v => runtime.setAnswer(q.id, v)}
                         lookups={ctx.lookups}
                         ctx={ctx}
+                        dynamicOpts={dynamicOptions[q.id]}
+                        isLoadingOptions={loadingOptions.has(q.id)}
+                        optionError={optionErrors[q.id]}
                       />
                     );
                   })}
@@ -112,11 +181,7 @@ export default function FlowWizard({ flowTree, onSubmit, onClose }: FlowWizardPr
               <Separator className="my-4" />
 
               <div className="flex items-center justify-between">
-                <Button
-                  variant="outline"
-                  onClick={runtime.goBack}
-                  disabled={isFirstStep || isRunningActions}
-                >
+                <Button variant="outline" onClick={runtime.goBack} disabled={isFirstStep || isRunningActions}>
                   <ArrowLeft className="mr-1 h-4 w-4" /> Tillbaka
                 </Button>
 
@@ -141,7 +206,6 @@ export default function FlowWizard({ flowTree, onSubmit, onClose }: FlowWizardPr
           </Card>
         </div>
 
-        {/* AI Suggestion Panel */}
         {showAiPanel && (
           <div className="lg:col-span-1">
             <AiSuggestionPanel
@@ -156,20 +220,24 @@ export default function FlowWizard({ flowTree, onSubmit, onClose }: FlowWizardPr
   );
 }
 
-function QuestionField({ question, value, onChange, lookups, ctx }: {
+function QuestionField({ question, value, onChange, lookups, ctx, dynamicOpts, isLoadingOptions, optionError }: {
   question: FlowQuestion;
   value: any;
   onChange: (v: any) => void;
   lookups: Record<string, any>;
   ctx: any;
+  dynamicOpts?: { value: string; label: string }[];
+  isLoadingOptions?: boolean;
+  optionError?: string;
 }) {
-  // Resolve default value with variables
   const resolvedDefault = question.default_value ? resolveText(String(question.default_value), ctx) : "";
   const val = value ?? (resolvedDefault || "");
 
-  // Resolve dynamic options
+  // Resolve options: dynamic CMDB > legacy dynamic_options > static
   let options = question.options || [];
-  if (question.dynamic_options) {
+  if (question.optionsMode === "dynamic" && dynamicOpts) {
+    options = dynamicOpts;
+  } else if (question.dynamic_options) {
     const lookupData = lookups[question.dynamic_options.action_id] || [];
     if (Array.isArray(lookupData)) {
       options = lookupData.map((item: any) => ({
@@ -179,9 +247,13 @@ function QuestionField({ question, value, onChange, lookups, ctx }: {
     }
   }
 
-  // Resolve label and description with variables
   const resolvedLabel = resolveText(question.label, ctx);
   const resolvedDescription = question.description ? resolveText(question.description, ctx) : undefined;
+
+  // Show loading/error for dynamic options
+  const showDynamicLoading = question.optionsMode === "dynamic" && isLoadingOptions;
+  const showDynamicError = question.optionsMode === "dynamic" && optionError;
+  const showEmptyDynamic = question.optionsMode === "dynamic" && !isLoadingOptions && !optionError && dynamicOpts && dynamicOpts.length === 0;
 
   return (
     <div className="space-y-1.5">
@@ -195,97 +267,118 @@ function QuestionField({ question, value, onChange, lookups, ctx }: {
         <p className="text-xs text-muted-foreground">{resolvedDescription}</p>
       )}
 
-      {question.input_type === "text" && (
-        <Input value={val} onChange={e => onChange(e.target.value)} placeholder={resolvedLabel} />
+      {showDynamicLoading && (
+        <div className="flex items-center gap-2 p-3 rounded-lg bg-muted">
+          <Loader2 className="h-4 w-4 animate-spin text-primary" />
+          <span className="text-sm text-muted-foreground">Hämtar alternativ…</span>
+        </div>
       )}
-      {question.input_type === "textarea" && (
-        <Textarea value={val} onChange={e => onChange(e.target.value)} placeholder={resolvedLabel} rows={3} />
+
+      {showDynamicError && (
+        <div className="p-3 rounded-lg bg-destructive/10 text-sm text-destructive flex items-center gap-2">
+          <AlertCircle className="h-4 w-4" />
+          <span>{optionError}</span>
+        </div>
       )}
-      {question.input_type === "number" && (
-        <Input type="number" value={val} onChange={e => onChange(e.target.value)} min={question.validation?.min} max={question.validation?.max} />
+
+      {showEmptyDynamic && (
+        <div className="p-3 rounded-lg bg-muted text-sm text-muted-foreground">
+          Inga alternativ hittades
+          {question.dynamicOptions?.source === "userDevices" && (
+            <Button variant="link" size="sm" className="text-xs ml-2 h-auto p-0">
+              Jag saknar en registrerad enhet
+            </Button>
+          )}
+        </div>
       )}
-      {question.input_type === "date" && (
-        <Input type="date" value={val} onChange={e => onChange(e.target.value)} />
-      )}
-      {(question.input_type === "select" || question.input_type === "autocomplete") && (
-        <Select value={val} onValueChange={onChange}>
-          <SelectTrigger><SelectValue placeholder="Välj..." /></SelectTrigger>
-          <SelectContent>
-            {options.map(o => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
-          </SelectContent>
-        </Select>
-      )}
-      {question.input_type === "radio" && (
-        <div className="space-y-1">
-          {options.map(o => (
-            <label key={o.value} className="flex items-start gap-2 text-sm cursor-pointer">
-              <input type="radio" name={question.id} checked={val === o.value} onChange={() => onChange(o.value)} className="text-primary mt-0.5" />
-              <div>
-                <span>{o.label}</span>
-                {o.helptext && <p className="text-xs text-muted-foreground">{o.helptext}</p>}
-                {o.cost != null && <span className="text-xs text-muted-foreground ml-1">({o.cost} kr)</span>}
-              </div>
+
+      {!showDynamicLoading && !showDynamicError && (
+        <>
+          {question.input_type === "text" && (
+            <Input value={val} onChange={e => onChange(e.target.value)} placeholder={resolvedLabel} />
+          )}
+          {question.input_type === "textarea" && (
+            <Textarea value={val} onChange={e => onChange(e.target.value)} placeholder={resolvedLabel} rows={3} />
+          )}
+          {question.input_type === "number" && (
+            <Input type="number" value={val} onChange={e => onChange(e.target.value)} min={question.validation?.min} max={question.validation?.max} />
+          )}
+          {question.input_type === "date" && (
+            <Input type="date" value={val} onChange={e => onChange(e.target.value)} />
+          )}
+          {(question.input_type === "select" || question.input_type === "autocomplete") && (
+            <Select value={val} onValueChange={onChange}>
+              <SelectTrigger><SelectValue placeholder="Välj..." /></SelectTrigger>
+              <SelectContent>
+                {options.map(o => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          )}
+          {question.input_type === "radio" && (
+            <div className="space-y-1">
+              {options.map(o => (
+                <label key={o.value} className="flex items-start gap-2 text-sm cursor-pointer">
+                  <input type="radio" name={question.id} checked={val === o.value} onChange={() => onChange(o.value)} className="text-primary mt-0.5" />
+                  <div>
+                    <span>{o.label}</span>
+                    {(o as any).helptext && <p className="text-xs text-muted-foreground">{(o as any).helptext}</p>}
+                    {(o as any).cost != null && <span className="text-xs text-muted-foreground ml-1">({(o as any).cost} kr)</span>}
+                  </div>
+                </label>
+              ))}
+            </div>
+          )}
+          {question.input_type === "checkbox" && options.length > 0 && (
+            <div className="space-y-1">
+              {options.map(o => (
+                <label key={o.value} className="flex items-start gap-2 text-sm cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={Array.isArray(val) && val.includes(o.value)}
+                    onChange={e => {
+                      const current = Array.isArray(val) ? val : [];
+                      onChange(e.target.checked ? [...current, o.value] : current.filter((v: string) => v !== o.value));
+                    }}
+                    className="rounded mt-0.5"
+                  />
+                  <span>{o.label}</span>
+                </label>
+              ))}
+            </div>
+          )}
+          {question.input_type === "checkbox" && options.length === 0 && (
+            <label className="flex items-center gap-2 text-sm cursor-pointer">
+              <input type="checkbox" checked={!!val} onChange={e => onChange(e.target.checked)} className="rounded" />
+              {resolvedLabel}
             </label>
-          ))}
-        </div>
-      )}
-      {question.input_type === "checkbox" && options.length > 0 && (
-        <div className="space-y-1">
-          {options.map(o => (
-            <label key={o.value} className="flex items-start gap-2 text-sm cursor-pointer">
-              <input
-                type="checkbox"
-                checked={Array.isArray(val) && val.includes(o.value)}
-                onChange={e => {
-                  const current = Array.isArray(val) ? val : [];
-                  onChange(e.target.checked ? [...current, o.value] : current.filter((v: string) => v !== o.value));
-                }}
-                className="rounded mt-0.5"
-              />
-              <div>
-                <span>{o.label}</span>
-                {o.helptext && <p className="text-xs text-muted-foreground">{o.helptext}</p>}
-                {o.cost != null && <span className="text-xs text-muted-foreground ml-1">({o.cost} kr)</span>}
-              </div>
-            </label>
-          ))}
-        </div>
-      )}
-      {question.input_type === "checkbox" && options.length === 0 && (
-        <label className="flex items-center gap-2 text-sm cursor-pointer">
-          <input type="checkbox" checked={!!val} onChange={e => onChange(e.target.checked)} className="rounded" />
-          {resolvedLabel}
-        </label>
-      )}
-      {question.input_type === "info" && (
-        <div className="p-3 rounded-lg bg-muted/50 text-sm text-muted-foreground whitespace-pre-line">
-          {resolvedDescription || resolvedLabel}
-        </div>
-      )}
-      {question.input_type === "multiselect" && (
-        <div className="space-y-1">
-          {options.map(o => (
-            <label key={o.value} className="flex items-start gap-2 text-sm cursor-pointer">
-              <input
-                type="checkbox"
-                checked={Array.isArray(val) && val.includes(o.value)}
-                onChange={e => {
-                  const current = Array.isArray(val) ? val : [];
-                  onChange(e.target.checked ? [...current, o.value] : current.filter((v: string) => v !== o.value));
-                }}
-                className="rounded mt-0.5"
-              />
-              <div>
-                <span>{o.label}</span>
-                {o.helptext && <p className="text-xs text-muted-foreground">{o.helptext}</p>}
-                {o.cost != null && <span className="text-xs text-muted-foreground ml-1">({o.cost} kr)</span>}
-              </div>
-            </label>
-          ))}
-        </div>
-      )}
-      {question.input_type === "file" && (
-        <Input type="file" onChange={e => onChange(e.target.files?.[0]?.name || "")} />
+          )}
+          {question.input_type === "info" && (
+            <div className="p-3 rounded-lg bg-muted/50 text-sm text-muted-foreground whitespace-pre-line">
+              {resolvedDescription || resolvedLabel}
+            </div>
+          )}
+          {question.input_type === "multiselect" && (
+            <div className="space-y-1">
+              {options.map(o => (
+                <label key={o.value} className="flex items-start gap-2 text-sm cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={Array.isArray(val) && val.includes(o.value)}
+                    onChange={e => {
+                      const current = Array.isArray(val) ? val : [];
+                      onChange(e.target.checked ? [...current, o.value] : current.filter((v: string) => v !== o.value));
+                    }}
+                    className="rounded mt-0.5"
+                  />
+                  <span>{o.label}</span>
+                </label>
+              ))}
+            </div>
+          )}
+          {question.input_type === "file" && (
+            <Input type="file" onChange={e => onChange(e.target.files?.[0]?.name || "")} />
+          )}
+        </>
       )}
     </div>
   );

@@ -47,6 +47,21 @@ export interface QuestionValidation {
   custom_rules?: { expression: string; message: string }[];
 }
 
+export type CmdbDynamicSource =
+  | "userDevices" | "userSystems" | "userApplications"
+  | "systemServers" | "systemDatabases" | "systemApis";
+
+export interface DynamicOptionsConfig {
+  provider: "cmdb";
+  source: CmdbDynamicSource;
+  params?: Record<string, string>;
+  labelTemplate?: string;
+  valuePath?: string;
+  labelPath?: string;
+  filter?: { field: string; op: "eq" | "contains" | "in"; value: string }[];
+  dependsOn?: string[];
+}
+
 export interface FlowQuestion {
   id: string;
   label: string;
@@ -54,7 +69,9 @@ export interface FlowQuestion {
   required: boolean;
   default_value?: any;
   input_type: InputType;
+  optionsMode?: "static" | "dynamic";
   options?: { value: string; label: string; helptext?: string; cost?: number }[];
+  dynamicOptions?: DynamicOptionsConfig;
   validation?: QuestionValidation;
   dynamic_options?: { action_id: string; label_key: string; value_key: string };
   visibility_conditions?: ConditionExpression;
