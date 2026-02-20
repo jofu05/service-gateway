@@ -15,7 +15,7 @@ import {
   Filter, MessageSquare, X, Settings, Search
 } from "lucide-react";
 import { toast } from "sonner";
-import type { FlowStep, FlowQuestion, FlowTree, FlowAction, InputType, StepType } from "@/lib/flow-engine/types";
+import type { FlowStep, FlowQuestion, FlowTree, FlowAction, InputType, StepType, DynamicOptionsConfig, CmdbDynamicSource } from "@/lib/flow-engine/types";
 import { useState, useEffect } from "react";
 import RuleBuilder from "@/components/editor/RuleBuilder";
 import { TextWithVariables } from "@/components/editor/VariablePicker";
@@ -684,70 +684,251 @@ function QuestionCard({ question, index, onUpdate, onDelete, onMoveUp, onMoveDow
             </CollapsibleContent>
           </Collapsible>
 
-          {(question.input_type === "select" || question.input_type === "radio" || question.input_type === "multiselect" || question.input_type === "checkbox") && (
-            <div className="space-y-2">
-              <Label className="text-xs">Alternativ</Label>
-              {(question.options || []).map((opt, oi) => (
-                <div key={oi} className="flex items-start gap-1.5 bg-muted/50 rounded-md p-2">
-                  <div className="flex-1 space-y-1">
-                    <Input
-                      value={opt.label}
-                      onChange={e => {
-                        const opts = [...(question.options || [])];
-                        opts[oi] = { ...opts[oi], label: e.target.value, value: e.target.value };
-                        onUpdate({ options: opts });
-                      }}
-                      placeholder="Alternativtext"
-                      className="h-7 text-xs"
-                    />
-                    <Input
-                      value={opt.helptext || ""}
-                      onChange={e => {
-                        const opts = [...(question.options || [])];
-                        opts[oi] = { ...opts[oi], helptext: e.target.value };
-                        onUpdate({ options: opts });
-                      }}
-                      placeholder="Hjälptext (valfritt)"
-                      className="h-6 text-[11px] text-muted-foreground border-dashed"
-                    />
-                    <Input
-                      type="number"
-                      value={opt.cost ?? ""}
-                      onChange={e => {
-                        const opts = [...(question.options || [])];
-                        opts[oi] = { ...opts[oi], cost: e.target.value ? Number(e.target.value) : undefined };
-                        onUpdate({ options: opts });
-                      }}
-                      placeholder="Kostnad (valfritt)"
-                      className="h-6 text-[11px] text-muted-foreground border-dashed"
-                    />
-                  </div>
-                  <button
+          {(question.input_type === "select" || question.input_type === "radio" || question.input_type === "multiselect" || question.input_type === "checkbox" || question.input_type === "autocomplete") && (
+            <div className="space-y-3">
+              {/* Options mode selector */}
+              <div>
+                <Label className="text-xs">Alternativkälla</Label>
+                <Select
+                  value={question.optionsMode || "static"}
+                  onValueChange={v => onUpdate({ optionsMode: v as "static" | "dynamic" })}
+                >
+                  <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="static">Statiska alternativ</SelectItem>
+                    <SelectItem value="dynamic">Hämta från CMDB</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {question.optionsMode === "dynamic" ? (
+                <DynamicOptionsEditor
+                  config={question.dynamicOptions}
+                  onChange={cfg => onUpdate({ dynamicOptions: cfg })}
+                  flowTree={flowTree}
+                  currentStepId={currentStepId}
+                />
+              ) : (
+                <div className="space-y-2">
+                  <Label className="text-xs">Alternativ</Label>
+                  {(question.options || []).map((opt, oi) => (
+                    <div key={oi} className="flex items-start gap-1.5 bg-muted/50 rounded-md p-2">
+                      <div className="flex-1 space-y-1">
+                        <Input
+                          value={opt.label}
+                          onChange={e => {
+                            const opts = [...(question.options || [])];
+                            opts[oi] = { ...opts[oi], label: e.target.value, value: e.target.value };
+                            onUpdate({ options: opts });
+                          }}
+                          placeholder="Alternativtext"
+                          className="h-7 text-xs"
+                        />
+                        <Input
+                          value={opt.helptext || ""}
+                          onChange={e => {
+                            const opts = [...(question.options || [])];
+                            opts[oi] = { ...opts[oi], helptext: e.target.value };
+                            onUpdate({ options: opts });
+                          }}
+                          placeholder="Hjälptext (valfritt)"
+                          className="h-6 text-[11px] text-muted-foreground border-dashed"
+                        />
+                        <Input
+                          type="number"
+                          value={opt.cost ?? ""}
+                          onChange={e => {
+                            const opts = [...(question.options || [])];
+                            opts[oi] = { ...opts[oi], cost: e.target.value ? Number(e.target.value) : undefined };
+                            onUpdate({ options: opts });
+                          }}
+                          placeholder="Kostnad (valfritt)"
+                          className="h-6 text-[11px] text-muted-foreground border-dashed"
+                        />
+                      </div>
+                      <button
+                        onClick={() => {
+                          const opts = (question.options || []).filter((_, j) => j !== oi);
+                          onUpdate({ options: opts });
+                        }}
+                        className="text-destructive/60 hover:text-destructive mt-1"
+                      >
+                        <Trash2 className="h-3 w-3" />
+                      </button>
+                    </div>
+                  ))}
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="text-xs w-full"
                     onClick={() => {
-                      const opts = (question.options || []).filter((_, j) => j !== oi);
+                      const opts = [...(question.options || []), { value: "", label: "", helptext: "", cost: undefined }];
                       onUpdate({ options: opts });
                     }}
-                    className="text-destructive/60 hover:text-destructive mt-1"
                   >
-                    <Trash2 className="h-3 w-3" />
-                  </button>
+                    <PlusCircle className="mr-1 h-3 w-3" /> Lägg till alternativ
+                  </Button>
                 </div>
-              ))}
-              <Button
-                variant="ghost"
-                size="sm"
-                className="text-xs w-full"
-                onClick={() => {
-                  const opts = [...(question.options || []), { value: "", label: "", helptext: "", cost: undefined }];
-                  onUpdate({ options: opts });
-                }}
-              >
-                <PlusCircle className="mr-1 h-3 w-3" /> Lägg till alternativ
-              </Button>
+              )}
             </div>
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+const CMDB_SOURCES: { value: CmdbDynamicSource; label: string; requiresParam?: string }[] = [
+  { value: "userDevices", label: "Användarens enheter" },
+  { value: "userSystems", label: "Användarens system" },
+  { value: "userApplications", label: "Användarens applikationer" },
+  { value: "systemServers", label: "Systemets servrar", requiresParam: "systemId" },
+  { value: "systemDatabases", label: "Systemets databaser", requiresParam: "systemId" },
+  { value: "systemApis", label: "Systemets API:er", requiresParam: "systemId" },
+];
+
+function DynamicOptionsEditor({ config, onChange, flowTree, currentStepId }: {
+  config?: DynamicOptionsConfig;
+  onChange: (cfg: DynamicOptionsConfig) => void;
+  flowTree: FlowTree;
+  currentStepId: string;
+}) {
+  const cfg = config || { provider: "cmdb", source: "userDevices" };
+  const sourceConfig = CMDB_SOURCES.find(s => s.value === cfg.source);
+
+  const allQuestions = flowTree.steps.flatMap(s => s.questions.filter(q => q.input_type !== "info"));
+
+  return (
+    <div className="space-y-3 p-3 border rounded-lg bg-muted/30">
+      <div>
+        <Label className="text-xs">CMDB-källa</Label>
+        <Select value={cfg.source} onValueChange={v => onChange({ ...cfg, source: v as CmdbDynamicSource })}>
+          <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            {CMDB_SOURCES.map(s => (
+              <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
+      {sourceConfig?.requiresParam && (
+        <div>
+          <Label className="text-xs">{sourceConfig.requiresParam} (från svar eller template)</Label>
+          <Input
+            value={cfg.params?.[sourceConfig.requiresParam] || ""}
+            onChange={e => onChange({
+              ...cfg,
+              params: { ...cfg.params, [sourceConfig.requiresParam!]: e.target.value },
+            })}
+            placeholder={`T.ex. {{answers.systemQuestion}}`}
+            className="h-8 text-xs"
+          />
+        </div>
+      )}
+
+      <div className="grid grid-cols-2 gap-2">
+        <div>
+          <Label className="text-xs">Label-fält</Label>
+          <Input
+            value={cfg.labelPath || ""}
+            onChange={e => onChange({ ...cfg, labelPath: e.target.value })}
+            placeholder="name"
+            className="h-7 text-xs"
+          />
+        </div>
+        <div>
+          <Label className="text-xs">Värde-fält</Label>
+          <Input
+            value={cfg.valuePath || ""}
+            onChange={e => onChange({ ...cfg, valuePath: e.target.value })}
+            placeholder="id"
+            className="h-7 text-xs"
+          />
+        </div>
+      </div>
+
+      <div>
+        <Label className="text-xs">Label-template (valfritt)</Label>
+        <Input
+          value={cfg.labelTemplate || ""}
+          onChange={e => onChange({ ...cfg, labelTemplate: e.target.value })}
+          placeholder='T.ex. {{model}} ({{serialNumber}})'
+          className="h-7 text-xs"
+        />
+        <p className="text-[10px] text-muted-foreground mt-0.5">Använd fältnamn med {"{{fält}}"} för att bygga label</p>
+      </div>
+
+      <Collapsible>
+        <CollapsibleTrigger className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground hover:text-foreground w-full">
+          <Filter className="h-3 w-3" />
+          Filter (valfritt)
+          <ChevronRight className="h-3 w-3 ml-auto" />
+        </CollapsibleTrigger>
+        <CollapsibleContent className="mt-2 space-y-2">
+          {(cfg.filter || []).map((f, i) => (
+            <div key={i} className="flex items-center gap-1.5">
+              <Input value={f.field} onChange={e => {
+                const filters = [...(cfg.filter || [])];
+                filters[i] = { ...filters[i], field: e.target.value };
+                onChange({ ...cfg, filter: filters });
+              }} placeholder="Fält" className="h-7 text-xs flex-1" />
+              <Select value={f.op} onValueChange={v => {
+                const filters = [...(cfg.filter || [])];
+                filters[i] = { ...filters[i], op: v as any };
+                onChange({ ...cfg, filter: filters });
+              }}>
+                <SelectTrigger className="h-7 text-xs w-24"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="eq">är</SelectItem>
+                  <SelectItem value="contains">innehåller</SelectItem>
+                  <SelectItem value="in">i lista</SelectItem>
+                </SelectContent>
+              </Select>
+              <Input value={f.value} onChange={e => {
+                const filters = [...(cfg.filter || [])];
+                filters[i] = { ...filters[i], value: e.target.value };
+                onChange({ ...cfg, filter: filters });
+              }} placeholder="Värde" className="h-7 text-xs flex-1" />
+              <button onClick={() => {
+                const filters = (cfg.filter || []).filter((_, j) => j !== i);
+                onChange({ ...cfg, filter: filters });
+              }} className="text-destructive/60 hover:text-destructive">
+                <Trash2 className="h-3 w-3" />
+              </button>
+            </div>
+          ))}
+          <Button variant="ghost" size="sm" className="text-xs" onClick={() => {
+            onChange({ ...cfg, filter: [...(cfg.filter || []), { field: "", op: "eq", value: "" }] });
+          }}>
+            <PlusCircle className="mr-1 h-3 w-3" /> Lägg till filter
+          </Button>
+        </CollapsibleContent>
+      </Collapsible>
+
+      <div>
+        <Label className="text-xs">Beroenden (dependsOn)</Label>
+        <div className="flex flex-wrap gap-1 mt-1">
+          {allQuestions.map(q => (
+            <label key={q.id} className="flex items-center gap-1 text-[11px] bg-muted rounded px-1.5 py-0.5">
+              <input
+                type="checkbox"
+                checked={(cfg.dependsOn || []).includes(q.id)}
+                onChange={e => {
+                  const deps = cfg.dependsOn || [];
+                  const newDeps = e.target.checked
+                    ? [...deps, q.id]
+                    : deps.filter(d => d !== q.id);
+                  onChange({ ...cfg, dependsOn: newDeps });
+                }}
+                className="rounded"
+              />
+              {q.label}
+            </label>
+          ))}
+        </div>
+        <p className="text-[10px] text-muted-foreground mt-0.5">När dessa svar ändras laddas alternativen om</p>
+      </div>
     </div>
   );
 }
