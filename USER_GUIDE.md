@@ -223,19 +223,47 @@ Actions automatiserar processer:
 3. Välj CMDB-källa (användare, enheter, etc.)
 4. Konfigurera filter och visning
 
-### AI-stöd
+### CMDB-styrt incidentflöde
 
-Vissa flöden har AI-stöd för:
-- **Intelligenta förslag**: Automatiska ifyllningar
-- **Validering**: Kontrollera inmatad data
-- **Kategorisering**: Föreslå rätt kategori
+Systemet inkluderar ett förbyggt incidentflöde som använder CMDB-data:
 
-### Filuppladdningar
+#### Användarmappning
+Den inloggade användaren (Supabase Auth) mappas till CMDB-identitet via:
+1. **E-post** – matchas mot CMDB-registrerad e-postadress
+2. **Visningsnamn** – matchas mot displayName i CMDB
+3. **Fallback** – standardanvändare om ingen match hittas
 
-1. Välj filfråga i formulär
-2. Klicka för att välja filer
-3. Tillåtna format: PDF, DOC, XLS, JPG, PNG
-4. Max storlek: 10MB per fil
+#### De tre spåren
+
+**Spår A: Dator/Enhet**
+1. Användaren väljer "Dator / Enhet"
+2. Visar en lista med användarens tilldelade enheter från CMDB
+3. Vid val av dator laddas installerad mjukvara (program/system) på enheten
+4. Användaren markerar berörda program och beskriver problemet
+
+**Spår B: Applikation**
+1. Användaren väljer "Applikation"
+2. Visar applikationer som användaren har access till eller ansvarar för (owner/manager/operationsLead)
+3. Användaren beskriver problemet med rubrik och detaljerad text
+
+**Spår C: System**
+1. Användaren väljer "System"
+2. Visar system där användaren har access, ägarskap eller förvaltningsansvar
+3. Nästa steg listar alla servrar, API:er och databaser kopplade till systemet (multiselect)
+4. Användaren beskriver felet
+
+Alla spår avslutas med **"Granska & Skicka"** där en sammanfattning visas.
+
+#### CMDB-data som inkluderas
+Översikten inkluderar allt användaren:
+- **Har tillgång till** (via tilldelning eller användaraccess)
+- **Äger** (owner)
+- **Förvaltar** (manager)
+- **Driftansvarar för** (operationsLead)
+
+#### Installerad mjukvara per enhet
+I datorspåret kan användaren se vilka program som finns installerade på vald enhet.
+Listan laddas dynamiskt baserat på vald dator (med stöd för `dependsOn`-mekanism).
 
 ### Kommentarer och kommunikation
 

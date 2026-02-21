@@ -96,6 +96,14 @@ export interface CmdbSystemTree {
   apis: CmdbApi[];
 }
 
+export interface CmdbInstalledSoftware {
+  id: string;
+  deviceId: string;
+  name: string;
+  version?: string;
+  vendor?: string;
+}
+
 export interface CmdbUserOverview {
   identity: CmdbIdentity;
   permissions: CmdbPermission[];

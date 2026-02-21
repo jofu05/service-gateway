@@ -513,4 +513,60 @@ await supabase
 
 ---
 
+## 🖥️ CMDB Gateway API
+
+### Installerad mjukvara (nytt)
+
+```typescript
+import { cmdbGateway } from '@/lib/cmdb';
+
+// Hämta installerad mjukvara på en enhet
+const software = await cmdbGateway.getDeviceInstalledSoftware("dev-1");
+// Returnerar: CmdbInstalledSoftware[] med id, deviceId, name, version, vendor
+```
+
+### Användarmappning (förbättrat)
+
+`getMyOverview` stödjer nu e-post/displayName-matchning:
+
+```typescript
+// Mappning: email → displayName → fallback "u-1"
+const overview = await cmdbGateway.getMyOverview(
+  supabaseUserId,  // Supabase user.id
+  userEmail,       // user.email – matchas mot CMDB-identitet
+  displayName      // profil-displayName – sekundär matchning
+);
+```
+
+### Dynamisk alternativkälla: `deviceInstalledSoftware`
+
+Ny CMDB-källa för dynamiska frågor i flöden:
+
+```typescript
+// I flow-definition
+{
+  id: "installedSoftware",
+  input_type: "multiselect",
+  optionsMode: "dynamic",
+  dynamicOptions: {
+    provider: "cmdb",
+    source: "deviceInstalledSoftware",
+    params: { deviceId: "{{answers.deviceId}}" },
+    labelTemplate: "{{name}} v{{version}} ({{vendor}})",
+    valuePath: "id",
+    dependsOn: ["deviceId"]
+  }
+}
+```
+
+### UserOverview – utökad (förbättrat)
+
+`getUserOverview` inkluderar nu CI där användaren är:
+- **Tilldelad** (devices via assignedUserId, apps via userAccess)
+- **Ägare** (owner)
+- **Förvaltare** (manager)
+- **Driftansvarig** (operationsLead)
+
+---
+
 Denna dokumentation täcker de viktigaste API:erna och integrationerna. För mer detaljerad information, se inline-kommentarer i källkoden eller skapa ett issue för specifika frågor.

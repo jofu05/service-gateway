@@ -7,7 +7,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { cmdbGateway } from "@/lib/cmdb";
 
 export function useFlowRuntime(flowTree: FlowTree) {
-  const { user, roles } = useAuth();
+  const { user, roles, displayName } = useAuth();
 
   const [ctx, setCtx] = useState<RuntimeContext>(() => ({
     user: {
@@ -26,11 +26,15 @@ export function useFlowRuntime(flowTree: FlowTree) {
     step_history: [flowTree.flow.start_step_id],
   }));
 
-  // Load CMDB data on mount
+  // Load CMDB data on mount – map Supabase user via email/displayName
   useEffect(() => {
     (async () => {
       try {
-        const overview = await cmdbGateway.getMyOverview(user?.id);
+        const overview = await cmdbGateway.getMyOverview(
+          user?.id,
+          user?.email ?? undefined,
+          displayName || undefined,
+        );
         const primaryDevice = overview.devices.find(d => d.type === "laptop") ?? overview.devices[0] ?? null;
         setCtx(prev => ({
           ...prev,
@@ -50,7 +54,7 @@ export function useFlowRuntime(flowTree: FlowTree) {
         console.error("Failed to load CMDB data:", e);
       }
     })();
-  }, [user?.id]);
+  }, [user?.id, user?.email, displayName]);
 
   const [isRunningActions, setIsRunningActions] = useState(false);
   const [actionErrors, setActionErrors] = useState<string[]>([]);
