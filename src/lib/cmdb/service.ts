@@ -1,23 +1,67 @@
 // ===== CMDB SERVICE LAYER (builds DTOs from repository) =====
-import type { CmdbUserOverview, CmdbSystemTree, CmdbDevice, CmdbApplication, CmdbSystem } from "./types";
+import type { CmdbUserOverview, CmdbSystemTree, CmdbDevice, CmdbApplication, CmdbSystem, CmdbInstalledSoftware } from "./types";
 import * as repo from "./repository";
 
 /** Simulate async network delay */
 const delay = (ms = 120) => new Promise(r => setTimeout(r, ms));
+
+/** Resolve a Supabase user to a CMDB userId via email → displayName → fallback */
+export function resolveCmdbUserId(
+  supabaseUserId?: string,
+  email?: string,
+  displayName?: string,
+): string {
+  if (email) {
+    const byEmail = repo.identities.find(i => i.email.toLowerCase() === email.toLowerCase());
+    if (byEmail) return byEmail.userId;
+  }
+  if (displayName) {
+    const byName = repo.identities.find(i => i.displayName.toLowerCase() === displayName.toLowerCase());
+    if (byName) return byName.userId;
+  }
+  if (supabaseUserId) {
+    const byId = repo.identities.find(i => i.userId === supabaseUserId);
+    if (byId) return byId.userId;
+  }
+  return "u-1"; // fallback
+}
 
 export async function getUserOverview(userId: string): Promise<CmdbUserOverview> {
   await delay();
   const identity = repo.identities.find(i => i.userId === userId) ?? repo.identities[0];
   const userPerms = repo.permissions;
   const userDevices = repo.devices.filter(d => d.assignedUserId === userId);
+
+  // Apps from userAccess
   const accessEntries = repo.userAccess.filter(a => a.userId === userId);
-  const userApps = accessEntries
-    .map(a => repo.applications.find(app => app.id === a.applicationId))
-    .filter(Boolean) as CmdbApplication[];
-  const systemIds = new Set(userApps.map(a => a.systemId));
-  const userSystems = repo.systems.filter(s => systemIds.has(s.id));
+  const accessAppIds = new Set(accessEntries.map(a => a.applicationId));
+
+  // Apps where user is owner/manager/operationsLead
+  const roleApps = repo.applications.filter(a =>
+    a.owner === identity.displayName ||
+    a.manager === identity.displayName ||
+    a.operationsLead === identity.displayName
+  );
+
+  const allAppIds = new Set([...accessAppIds, ...roleApps.map(a => a.id)]);
+  const userApps = repo.applications.filter(a => allAppIds.has(a.id));
+
+  // Systems: from apps + where user is owner/manager/operationsLead
+  const systemIdsFromApps = new Set(userApps.map(a => a.systemId));
+  const roleSystems = repo.systems.filter(s =>
+    s.owner === identity.displayName ||
+    s.manager === identity.displayName ||
+    s.operationsLead === identity.displayName
+  );
+  const allSystemIds = new Set([...systemIdsFromApps, ...roleSystems.map(s => s.id)]);
+  const userSystems = repo.systems.filter(s => allSystemIds.has(s.id));
 
   return { identity, permissions: userPerms, devices: userDevices, applications: userApps, systemAccess: userSystems };
+}
+
+export async function getDeviceInstalledSoftware(deviceId: string): Promise<CmdbInstalledSoftware[]> {
+  await delay(80);
+  return repo.installedSoftware.filter(s => s.deviceId === deviceId);
 }
 
 export async function getUserDevices(userId?: string): Promise<CmdbDevice[]> {

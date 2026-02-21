@@ -66,13 +66,29 @@ export async function fetchDynamicOptions(
 
   switch (config.source) {
     case "userDevices":
-      items = await gateway.getUserDevices(params.userId || undefined);
+      // Prefer user-scoped data from ctx.cmdb if available
+      if (ctx.cmdb?.devices && (!params.userId || params.userId === ctx.user?.id)) {
+        items = ctx.cmdb.devices;
+      } else {
+        items = await gateway.getUserDevices(params.userId || undefined);
+      }
       break;
     case "userSystems":
-      items = await gateway.getAllSystems();
+      if (ctx.cmdb?.systemAccess) {
+        items = ctx.cmdb.systemAccess;
+      } else {
+        items = await gateway.getAllSystems();
+      }
       break;
     case "userApplications":
-      items = await gateway.getAllApplications();
+      if (ctx.cmdb?.applications) {
+        items = ctx.cmdb.applications;
+      } else {
+        items = await gateway.getAllApplications();
+      }
+      break;
+    case "deviceInstalledSoftware":
+      items = await gateway.getDeviceInstalledSoftware(params.deviceId || "");
       break;
     case "systemServers": {
       const tree = await gateway.getSystemTree(params.systemId || "");

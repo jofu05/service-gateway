@@ -49,7 +49,8 @@ export interface QuestionValidation {
 
 export type CmdbDynamicSource =
   | "userDevices" | "userSystems" | "userApplications"
-  | "systemServers" | "systemDatabases" | "systemApis";
+  | "systemServers" | "systemDatabases" | "systemApis"
+  | "deviceInstalledSoftware";
 
 export interface DynamicOptionsConfig {
   provider: "cmdb";

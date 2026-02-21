@@ -2,6 +2,7 @@
 import type {
   CmdbIdentity, CmdbPermission, CmdbDevice, CmdbSystem,
   CmdbServer, CmdbDatabase, CmdbApi, CmdbApplication, CmdbUserAccess,
+  CmdbInstalledSoftware,
 } from "./types";
 
 // --- Users / Identities ---
@@ -85,4 +86,20 @@ export const permissions: CmdbPermission[] = [
   { systemId: "sys-1", systemName: "Kommunportalen", accessLevel: "admin", grantedAt: "2023-01-15" },
   { systemId: "sys-2", systemName: "Ekonomisystemet", accessLevel: "read", grantedAt: "2023-06-01" },
   { systemId: "sys-3", systemName: "HR-Portalen", accessLevel: "write", grantedAt: "2024-02-10" },
+];
+
+// --- Installed Software per Device ---
+export const installedSoftware: CmdbInstalledSoftware[] = [
+  { id: "sw-1", deviceId: "dev-1", name: "Kommunportalen Webb", version: "3.2.1", vendor: "Intern" },
+  { id: "sw-2", deviceId: "dev-1", name: "Ekonomiverktyget", version: "2.0.4", vendor: "Visma" },
+  { id: "sw-3", deviceId: "dev-1", name: "Microsoft Office 365", version: "16.0", vendor: "Microsoft" },
+  { id: "sw-4", deviceId: "dev-1", name: "HR Self-Service", version: "1.8.0", vendor: "Intern" },
+  { id: "sw-5", deviceId: "dev-2", name: "Kommunportalen Webb", version: "3.2.1", vendor: "Intern" },
+  { id: "sw-6", deviceId: "dev-2", name: "Microsoft Office 365", version: "16.0", vendor: "Microsoft" },
+  { id: "sw-7", deviceId: "dev-3", name: "Kommunportalen Webb", version: "3.2.1", vendor: "Intern" },
+  { id: "sw-8", deviceId: "dev-3", name: "Ekonomiverktyget", version: "2.0.4", vendor: "Visma" },
+  { id: "sw-9", deviceId: "dev-3", name: "HR Self-Service", version: "1.8.0", vendor: "Intern" },
+  { id: "sw-10", deviceId: "dev-3", name: "Kartverktyget", version: "4.1.0", vendor: "ESRI" },
+  { id: "sw-11", deviceId: "dev-5", name: "Ekonomiverktyget", version: "2.0.4", vendor: "Visma" },
+  { id: "sw-12", deviceId: "dev-5", name: "Microsoft Office 365", version: "16.0", vendor: "Microsoft" },
 ];
