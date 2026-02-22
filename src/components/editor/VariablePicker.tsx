@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Braces, User, MessageSquare, Database, Monitor } from "lucide-react";
 import type { FlowTree } from "@/lib/flow-engine/types";
 import { getAvailableVariables, type AvailableVariable } from "@/lib/flow-engine/utils";
+import SmartVariableInput from "./SmartVariableInput";
 
 interface VariablePickerProps {
   flowTree: FlowTree;
@@ -82,6 +83,7 @@ export default function VariablePicker({ flowTree, currentStepId, onInsert }: Va
 
 /**
  * A text input with an integrated variable picker button.
+ * Now uses SmartVariableInput with autocomplete, visual tags, and drag-drop support.
  */
 export function TextWithVariables({ value, onChange, placeholder, flowTree, currentStepId, multiline }: {
   value: string;
@@ -91,58 +93,14 @@ export function TextWithVariables({ value, onChange, placeholder, flowTree, curr
   currentStepId?: string;
   multiline?: boolean;
 }) {
-  const inputRef = useRef<HTMLInputElement | HTMLTextAreaElement>(null);
-
-  const handleInsert = (variable: string) => {
-    const el = inputRef.current;
-    if (el) {
-      const start = el.selectionStart ?? value.length;
-      const end = el.selectionEnd ?? value.length;
-      const newValue = value.slice(0, start) + variable + value.slice(end);
-      onChange(newValue);
-      // Restore cursor
-      setTimeout(() => {
-        el.selectionStart = el.selectionEnd = start + variable.length;
-        el.focus();
-      }, 0);
-    } else {
-      onChange(value + variable);
-    }
-  };
-
-  // Highlight variables in text
-  const hasVariables = value.includes("{{");
-
   return (
-    <div className="space-y-1">
-      <div className="relative">
-        {multiline ? (
-          <textarea
-            ref={inputRef as any}
-            value={value}
-            onChange={e => onChange(e.target.value)}
-            placeholder={placeholder}
-            rows={2}
-            className="flex min-h-[60px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-          />
-        ) : (
-          <input
-            ref={inputRef as any}
-            value={value}
-            onChange={e => onChange(e.target.value)}
-            placeholder={placeholder}
-            className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-          />
-        )}
-      </div>
-      <div className="flex items-center justify-between">
-        <VariablePicker flowTree={flowTree} currentStepId={currentStepId} onInsert={handleInsert} />
-        {hasVariables && (
-          <Badge variant="outline" className="text-[10px]">
-            <Braces className="mr-0.5 h-2.5 w-2.5" /> Dynamisk text
-          </Badge>
-        )}
-      </div>
-    </div>
+    <SmartVariableInput
+      value={value}
+      onChange={onChange}
+      placeholder={placeholder}
+      flowTree={flowTree}
+      currentStepId={currentStepId}
+      multiline={multiline}
+    />
   );
 }
