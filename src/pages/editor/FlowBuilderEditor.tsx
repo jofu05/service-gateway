@@ -601,10 +601,12 @@ function QuestionCard({ question, index, onUpdate, onDelete, onMoveUp, onMoveDow
           {onMoveDown && <button onClick={onMoveDown} className="text-muted-foreground hover:text-foreground text-xs">▼</button>}
         </div>
         <div className="flex-1 min-w-0">
-          <Input
+          <TextWithVariables
             value={question.label}
-            onChange={e => onUpdate({ label: e.target.value })}
-            className="h-7 text-sm border-none p-0 focus-visible:ring-0"
+            onChange={v => onUpdate({ label: v })}
+            placeholder="Frågetext"
+            flowTree={flowTree}
+            currentStepId={currentStepId}
           />
         </div>
         <Select value={question.input_type} onValueChange={v => onUpdate({ input_type: v as InputType })}>
@@ -815,14 +817,15 @@ function DynamicOptionsEditor({ config, onChange, flowTree, currentStepId }: {
       {sourceConfig?.requiresParam && (
         <div>
           <Label className="text-xs">{sourceConfig.requiresParam} (från svar eller template)</Label>
-          <Input
+          <TextWithVariables
             value={cfg.params?.[sourceConfig.requiresParam] || ""}
-            onChange={e => onChange({
+            onChange={v => onChange({
               ...cfg,
-              params: { ...cfg.params, [sourceConfig.requiresParam!]: e.target.value },
+              params: { ...cfg.params, [sourceConfig.requiresParam!]: v },
             })}
             placeholder={`T.ex. {{answers.systemQuestion}}`}
-            className="h-8 text-xs"
+            flowTree={flowTree}
+            currentStepId={currentStepId}
           />
         </div>
       )}
@@ -850,13 +853,13 @@ function DynamicOptionsEditor({ config, onChange, flowTree, currentStepId }: {
 
       <div>
         <Label className="text-xs">Label-template (valfritt)</Label>
-        <Input
+        <TextWithVariables
           value={cfg.labelTemplate || ""}
-          onChange={e => onChange({ ...cfg, labelTemplate: e.target.value })}
+          onChange={v => onChange({ ...cfg, labelTemplate: v })}
           placeholder='T.ex. {{model}} ({{serialNumber}})'
-          className="h-7 text-xs"
+          flowTree={flowTree}
+          currentStepId={currentStepId}
         />
-        <p className="text-[10px] text-muted-foreground mt-0.5">Använd fältnamn med {"{{fält}}"} för att bygga label</p>
       </div>
 
       <Collapsible>
@@ -885,11 +888,19 @@ function DynamicOptionsEditor({ config, onChange, flowTree, currentStepId }: {
                   <SelectItem value="in">i lista</SelectItem>
                 </SelectContent>
               </Select>
-              <Input value={f.value} onChange={e => {
-                const filters = [...(cfg.filter || [])];
-                filters[i] = { ...filters[i], value: e.target.value };
-                onChange({ ...cfg, filter: filters });
-              }} placeholder="Värde" className="h-7 text-xs flex-1" />
+              <div className="flex-1">
+                <TextWithVariables
+                  value={f.value}
+                  onChange={v => {
+                    const filters = [...(cfg.filter || [])];
+                    filters[i] = { ...filters[i], value: v };
+                    onChange({ ...cfg, filter: filters });
+                  }}
+                  placeholder="Värde"
+                  flowTree={flowTree}
+                  currentStepId={currentStepId}
+                />
+              </div>
               <button onClick={() => {
                 const filters = (cfg.filter || []).filter((_, j) => j !== i);
                 onChange({ ...cfg, filter: filters });
