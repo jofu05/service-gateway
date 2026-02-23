@@ -1,27 +1,101 @@
 import type { AiSuggestion, RuntimeContext, FlowStep } from "./types";
 import { v4Fallback } from "./utils";
+import { supabase } from "@/integrations/supabase/client";
 
 /**
- * Mock AI suggestion layer. Provides deterministic suggestions based on context.
- * Will be replaced with real AI calls via Lovable AI gateway later.
+ * AI suggestion layer powered by Lovable AI gateway via edge function.
+ * Falls back to basic deterministic suggestions if the AI call fails.
  */
 
 export async function getStepSuggestions(
   step: FlowStep,
-  ctx: RuntimeContext
+  ctx: RuntimeContext,
+  flowName?: string,
 ): Promise<AiSuggestion[]> {
+  try {
+    const { data, error } = await supabase.functions.invoke("flow-ai", {
+      body: {
+        action: "suggestions",
+        step: {
+          title: step.title,
+          questions: step.questions.map((q) => ({
+            id: q.id,
+            label: q.label,
+            required: q.required,
+          })),
+        },
+        answers: ctx.answers,
+        flow_name: flowName || "Ärende",
+      },
+    });
+
+    if (error) throw error;
+
+    if (data?.suggestions && Array.isArray(data.suggestions)) {
+      return data.suggestions.map((s: any) => ({
+        id: s.id || v4Fallback(),
+        type: s.type || "action",
+        target_question_id: s.target_question_id,
+        suggested_value: s.suggested_value,
+        message: s.message,
+        confidence: s.confidence ?? 0.7,
+        reason: s.reason || "",
+      }));
+    }
+  } catch (err) {
+    console.warn("AI suggestions failed, using fallback:", err);
+  }
+
+  // Fallback: basic deterministic suggestions
+  return getFallbackSuggestions(step, ctx);
+}
+
+export async function getReviewSummary(
+  ctx: RuntimeContext,
+  flowName?: string,
+): Promise<AiSuggestion[]> {
+  try {
+    const { data, error } = await supabase.functions.invoke("flow-ai", {
+      body: {
+        action: "summary",
+        answers: ctx.answers,
+        flow_name: flowName || "Ärende",
+      },
+    });
+
+    if (error) throw error;
+
+    if (data?.suggestions && Array.isArray(data.suggestions)) {
+      return data.suggestions.map((s: any) => ({
+        id: s.id || v4Fallback(),
+        type: "summary" as const,
+        message: s.message,
+        confidence: s.confidence ?? 1.0,
+        reason: s.reason || "AI-genererad sammanfattning",
+      }));
+    }
+  } catch (err) {
+    console.warn("AI summary failed, using fallback:", err);
+  }
+
+  // Fallback: simple listing
+  return getFallbackSummary(ctx);
+}
+
+// --- Fallback logic (previously the only logic) ---
+
+function getFallbackSuggestions(step: FlowStep, ctx: RuntimeContext): AiSuggestion[] {
   const suggestions: AiSuggestion[] = [];
   const answers = ctx.answers;
-
-  // Suggest category based on description text
   const descText = (answers.description || answers.problemDescription || "").toLowerCase();
+
   if (descText && !answers.category) {
     let cat = "IT-Support";
     let confidence = 0.6;
     if (descText.includes("vpn") || descText.includes("nät")) { cat = "Nätverk"; confidence = 0.85; }
     if (descText.includes("behörighet") || descText.includes("åtkomst")) { cat = "Behörighet"; confidence = 0.82; }
     if (descText.includes("bestäl") || descText.includes("licens")) { cat = "Beställning"; confidence = 0.78; }
-    
+
     suggestions.push({
       id: v4Fallback(),
       type: "category",
@@ -29,50 +103,42 @@ export async function getStepSuggestions(
       suggested_value: cat,
       message: `Baserat på din beskrivning föreslår vi kategorin "${cat}"`,
       confidence,
-      reason: `Nyckelord hittade i beskrivningen`,
+      reason: "Nyckelord hittade i beskrivningen",
     });
   }
 
-  // Missing info checklist
-  const requiredFields = step.questions.filter(q => q.required);
-  const missing = requiredFields.filter(q => !answers[q.id]);
+  const requiredFields = step.questions.filter((q) => q.required);
+  const missing = requiredFields.filter((q) => !answers[q.id]);
   if (missing.length > 0) {
     suggestions.push({
       id: v4Fallback(),
       type: "checklist",
-      message: `Saknad information: ${missing.map(q => q.label).join(", ")}`,
+      message: `Saknad information: ${missing.map((q) => q.label).join(", ")}`,
       confidence: 1.0,
       reason: "Obligatoriska fält som inte fyllts i",
-    });
-  }
-
-  // Next best action suggestions
-  if (descText.includes("startar inte") || descText.includes("fungerar inte")) {
-    suggestions.push({
-      id: v4Fallback(),
-      type: "action",
-      message: "Har du provat att starta om enheten?",
-      confidence: 0.7,
-      reason: "Vanlig lösning för driftproblem",
     });
   }
 
   return suggestions;
 }
 
-export async function getReviewSummary(ctx: RuntimeContext): Promise<AiSuggestion[]> {
-  const answerCount = Object.keys(ctx.answers).filter(k => ctx.answers[k] != null && ctx.answers[k] !== "").length;
-  
+function getFallbackSummary(ctx: RuntimeContext): AiSuggestion[] {
+  const answerCount = Object.keys(ctx.answers).filter(
+    (k) => ctx.answers[k] != null && ctx.answers[k] !== "",
+  ).length;
+
   const summary = Object.entries(ctx.answers)
     .filter(([, v]) => v != null && v !== "")
     .map(([k, v]) => `• ${k}: ${v}`)
     .join("\n");
 
-  return [{
-    id: v4Fallback(),
-    type: "summary",
-    message: `Sammanfattning av ditt ärende (${answerCount} fält ifyllda):\n${summary}`,
-    confidence: 1.0,
-    reason: "Automatisk sammanfattning",
-  }];
+  return [
+    {
+      id: v4Fallback(),
+      type: "summary",
+      message: `Sammanfattning av ditt ärende (${answerCount} fält ifyllda):\n${summary}`,
+      confidence: 1.0,
+      reason: "Automatisk sammanfattning (fallback)",
+    },
+  ];
 }
