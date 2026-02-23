@@ -188,3 +188,27 @@ export function usePublishFlow() {
     },
   });
 }
+
+export function useDeleteFlow() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (flowId: string) => {
+      // Delete versions first (FK constraint)
+      const { error: vErr } = await supabase
+        .from("flow_versions")
+        .delete()
+        .eq("flow_id", flowId);
+      if (vErr) throw vErr;
+
+      const { error: fErr } = await supabase
+        .from("flows")
+        .delete()
+        .eq("id", flowId);
+      if (fErr) throw fErr;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["flows"] });
+    },
+  });
+}
