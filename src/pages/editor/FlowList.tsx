@@ -7,10 +7,11 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { PlusCircle, GitBranch, Pencil, Eye, Loader2 } from "lucide-react";
+import { PlusCircle, GitBranch, Pencil, Eye, Loader2, Trash2 } from "lucide-react";
 import { toast } from "sonner";
-import { useFlows, useCreateFlow } from "@/hooks/use-flow-crud";
+import { useFlows, useCreateFlow, useDeleteFlow } from "@/hooks/use-flow-crud";
 
 const statusColors: Record<string, string> = {
   draft: "bg-warning/10 text-warning border-warning/30",
@@ -22,6 +23,7 @@ const statusLabels: Record<string, string> = { draft: "Utkast", published: "Publ
 export default function FlowList() {
   const { data: flows, isLoading } = useFlows();
   const createFlow = useCreateFlow();
+  const deleteFlow = useDeleteFlow();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [newName, setNewName] = useState("");
   const [newDesc, setNewDesc] = useState("");
@@ -109,6 +111,37 @@ export default function FlowList() {
                   <Button variant="ghost" size="sm" onClick={() => navigate("/editor/flows/preview")}>
                     <Eye className="h-4 w-4" />
                   </Button>
+                  <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                      <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive">
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>Ta bort flöde</AlertDialogTitle>
+                        <AlertDialogDescription>
+                          Är du säker på att du vill ta bort "{f.name}"? Alla versioner tas bort permanent.
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel>Avbryt</AlertDialogCancel>
+                        <AlertDialogAction
+                          className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                          onClick={async () => {
+                            try {
+                              await deleteFlow.mutateAsync(f.id);
+                              toast.success("Flödet har tagits bort");
+                            } catch (e: any) {
+                              toast.error("Kunde inte ta bort: " + e.message);
+                            }
+                          }}
+                        >
+                          Ta bort
+                        </AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
                 </div>
               </CardContent>
             </Card>
