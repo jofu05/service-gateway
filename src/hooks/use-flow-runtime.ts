@@ -93,8 +93,8 @@ export function useFlowRuntime(flowTree: FlowTree) {
     if (!currentStep || !flowTree.flow.ai_enabled) return;
     (async () => {
       const suggestions = currentStep.type === "review"
-        ? await getReviewSummary(ctx)
-        : await getStepSuggestions(currentStep, ctx);
+        ? await getReviewSummary(ctx, flowTree.flow.name)
+        : await getStepSuggestions(currentStep, ctx, flowTree.flow.name);
       setCtx(prev => ({ ...prev, ai_suggestions: suggestions }));
     })();
   }, [ctx.current_step_id, flowTree.flow.ai_enabled]);

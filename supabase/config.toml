@@ -1,1 +1,4 @@
 project_id = "qimklphqtlurfibmhqgj"
+
+[functions.flow-ai]
+verify_jwt = false
