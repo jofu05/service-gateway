@@ -88,16 +88,16 @@ export function useFlowRuntime(flowTree: FlowTree) {
     })();
   }, [ctx.current_step_id]);
 
-  // AI suggestions on step open
-  useEffect(() => {
-    if (!currentStep || !flowTree.flow.ai_enabled) return;
-    (async () => {
-      const suggestions = currentStep.type === "review"
-        ? await getReviewSummary(ctx, flowTree.flow.name)
-        : await getStepSuggestions(currentStep, ctx, flowTree.flow.name);
-      setCtx(prev => ({ ...prev, ai_suggestions: suggestions }));
-    })();
-  }, [ctx.current_step_id, flowTree.flow.ai_enabled]);
+  // AI suggestions disabled
+  // useEffect(() => {
+  //   if (!currentStep || !flowTree.flow.ai_enabled) return;
+  //   (async () => {
+  //     const suggestions = currentStep.type === "review"
+  //       ? await getReviewSummary(ctx, flowTree.flow.name)
+  //       : await getStepSuggestions(currentStep, ctx, flowTree.flow.name);
+  //     setCtx(prev => ({ ...prev, ai_suggestions: suggestions }));
+  //   })();
+  // }, [ctx.current_step_id, flowTree.flow.ai_enabled]);
 
   const setAnswer = useCallback((questionId: string, value: any) => {
     setCtx(prev => ({
